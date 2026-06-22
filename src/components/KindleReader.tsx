@@ -63,6 +63,14 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const [kokoroVoice, setKokoroVoice] = useState<string>('pt_neural');
   const [isTtsLoading, setIsTtsLoading] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.15); // Default to slightly faster 1.15x for perfect understanding
+
+  // Live speed adjustment
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
 
   const currentPassage: PassagePage = passages[relativePageIndex] || passages[0];
 
@@ -202,6 +210,8 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         const audioUrl = URL.createObjectURL(blob);
 
         const newAudio = new Audio(audioUrl);
+        // Explicitly force selected playback rate matching user speed preferences
+        newAudio.playbackRate = playbackSpeed;
         audioRef.current = newAudio;
 
         newAudio.onended = () => {
@@ -244,6 +254,8 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = 'pt-BR';
+      // Apply selected native voice rate
+      utterance.rate = playbackSpeed;
 
       const voices = window.speechSynthesis.getVoices();
       const ptVoice = voices.find(v => v.lang.startsWith('pt'));
@@ -647,6 +659,96 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
             >
               {currentPassage.text}
             </p>
+
+            {/* Elegant, premium audiobook controller */}
+            <div className={`mt-8 p-3 rounded-none border ${activeStyles.border} ${activeStyles.panelBg} flex flex-col sm:flex-row items-center justify-between gap-3 font-sans`} id="main-audiobook-player">
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <div className={`p-2 rounded-sm border ${activeStyles.border} ${theme === 'charcoal' ? 'bg-stone-800' : 'bg-stone-100'} text-[#5A5A40]`}>
+                  <AudioLines className={`w-4 h-4 ${isPlayingTts && !isPausedTts ? 'animate-pulse text-emerald-600 dark:text-emerald-400' : ''}`} />
+                </div>
+                <div className="text-left">
+                  <p className="text-[10px] font-bold leading-tight uppercase tracking-wider text-stone-700 dark:text-stone-300">
+                    {isTtsLoading ? "Sintetizando Voz..." : isPlayingTts ? (isPausedTts ? "Audiobook Pausado" : "Narrador Ativo") : "Audiobook Player"}
+                  </p>
+                   <p className="text-[9px] text-stone-500 dark:text-stone-400 mt-0.5 uppercase tracking-wide">
+                    {ttsEngine === 'kokoro' ? 'Voz Neural de Alta Fidelidade' : 'Sintetizador do Navegador'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Player controls */}
+              <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+                {/* Speed multipliers */}
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] uppercase tracking-wider font-bold opacity-75 mr-1 hidden xs:inline">Velocidade:</span>
+                  <div className={`flex border ${activeStyles.border} rounded-sm overflow-hidden text-[9px] font-mono font-bold bg-white dark:bg-stone-900`}>
+                    {[1.0, 1.15, 1.3, 1.5].map((speed) => (
+                      <button
+                        key={speed}
+                        onClick={() => setPlaybackSpeed(speed)}
+                        title={`Reproduzir em ${speed}x`}
+                        className={`px-1.5 py-1 select-none cursor-pointer transition ${
+                          playbackSpeed === speed
+                            ? 'bg-[#5A5A40] text-white'
+                            : 'text-stone-600 dark:text-stone-400 hover:bg-black/5 dark:hover:bg-white/5'
+                        }`}
+                      >
+                        {speed}x
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Play/Pause & Stop bundle */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isTtsLoading) return;
+                      if (isPlayingTts) {
+                        togglePauseTts();
+                      } else {
+                        executeTtsExplanation(`Lendo trecho de: ${book.title}. ${currentPassage.text}`);
+                      }
+                    }}
+                    disabled={isTtsLoading}
+                    className={`px-3 py-1.5 rounded-sm flex items-center gap-1.5 text-[10px] font-sans uppercase tracking-widest font-bold transition select-none cursor-pointer ${
+                      isTtsLoading
+                        ? 'bg-amber-600 text-white animate-pulse'
+                        : isPlayingTts && !isPausedTts
+                          ? 'bg-amber-700 hover:bg-amber-800 text-white'
+                          : 'bg-emerald-600 hover:bg-emerald-700 text-white border-transparent'
+                    }`}
+                  >
+                    {isTtsLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : isPlayingTts && !isPausedTts ? (
+                      <>
+                        <Pause className="w-3.5 h-3.5 fill-current animate-pulse" />
+                        <span>Pausar</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3.5 h-3.5 fill-current" />
+                        <span>{isPausedTts ? "Retomar" : "Ouvir"}</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Stop button to terminate current text stream entirely */}
+                  {isPlayingTts && (
+                    <button
+                      type="button"
+                      onClick={stopTts}
+                      className="p-1.5 rounded-sm border border-red-500/20 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white transition cursor-pointer"
+                      title="Parar áudio"
+                    >
+                      <Square className="w-3.5 h-3.5 fill-current" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
 
           </div>
         </div>
