@@ -46,6 +46,9 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // --- Mobile responsivity toggle ---
+  const [showCompanionOnMobile, setShowCompanionOnMobile] = useState<boolean>(false);
+
   // --- Conversations Tab ("Conversar com o trecho") ---
   const [activeTab, setActiveTab] = useState<'dossier' | 'chat'>('dossier');
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'assistant'; text: string; timestamp: Date }>>([]);
@@ -455,6 +458,15 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
             <span className="text-[10px] bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-sm">
               Paperwhite Modo
             </span>
+            {/* Companion toggle on mobile status bar */}
+            <button 
+              type="button" 
+              onClick={() => setShowCompanionOnMobile(true)}
+              className="md:hidden p-1.5 bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-stone-800 dark:text-stone-300 rounded-full transition cursor-pointer flex items-center gap-1"
+              title="Ver Dossiê e IA"
+            >
+              <Sparkles className="w-4 h-4 text-[#5A5A40] dark:text-stone-300" />
+            </button>
             <button 
               type="button" 
               onClick={() => setShowSettings(!showSettings)}
@@ -768,7 +780,13 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
           {/* Kindle Progress bar footer */}
           <div className="text-center font-mono opacity-80 flex flex-col items-center">
             <span>PÁGINA {relativePageIndex + 1} DE {passages.length}</span>
-            <div className="w-24 bg-black/10 dark:bg-white/10 h-1 mt-1 overflow-hidden rounded-sm">
+            <button
+              onClick={() => setShowCompanionOnMobile(true)}
+              className="md:hidden mt-1 px-3 py-1 bg-[#5A5A40]/10 text-[#5A5A40] hover:bg-[#5A5A40]/20 border border-[#5A5A40]/20 rounded-sm text-[9px] uppercase tracking-wider flex items-center gap-1 font-bold shadow-sm"
+            >
+              <Sparkles className="w-3 h-3" /> Dossiê e IA
+            </button>
+            <div className="w-24 bg-black/10 dark:bg-white/10 h-1 mt-1 overflow-hidden rounded-sm hidden xs:block">
               <div 
                 className="bg-[#5A5A40] h-full" 
                 style={{ width: `${((relativePageIndex + 1) / passages.length) * 100}%` }}
@@ -791,7 +809,11 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
       {/* RIGHT AREA: Kindle Smart Companion Panel / Side Panel */}
       <div 
-        className={`w-full md:w-[480px] shrink-0 h-[45%] md:h-full flex flex-col justify-between ${activeStyles.panelBg} border-t md:border-t-0 md:border-l ${activeStyles.border} overflow-hidden`}
+        className={`${
+          showCompanionOnMobile 
+            ? 'fixed inset-0 z-50 flex flex-col' 
+            : 'hidden'
+        } md:flex md:relative md:inset-auto md:z-0 md:w-[480px] md:shrink-0 md:h-full md:flex-col md:justify-between ${activeStyles.panelBg} border-t md:border-t-0 md:border-l ${activeStyles.border} overflow-hidden`}
         id="kindle-smart-panel"
       >
         {/* Panel Header */}
@@ -800,7 +822,16 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
             <Sparkles className="w-4 h-4 text-[#5A5A40]" />
             <span>X-Ray & Intelecto Ativo</span>
           </div>
-          <span className="text-[9px] font-mono opacity-60 uppercase branding-text">E-Reader Inteligente</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] font-mono opacity-60 uppercase branding-text hidden xs:inline">E-Reader Inteligente</span>
+            <button
+              onClick={() => setShowCompanionOnMobile(false)}
+              className="md:hidden px-3 py-1.5 bg-[#5A5A40] text-white font-sans text-[10px] uppercase font-bold tracking-wider rounded-sm transition cursor-pointer"
+              title="Voltar para o livro"
+            >
+              Voltar ao Livro
+            </button>
+          </div>
         </div>
 
         {/* Tab Selection */}
@@ -848,7 +879,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
           {activeTab === 'chat' ? (
             <div className="flex flex-col h-full justify-between gap-4" id="chat-tab-panel">
               {/* Messages viewport */}
-              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[300px] md:max-h-[calc(100vh-320px)]" id="chat-messages-scrollarea">
+              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[45vh] md:max-h-[calc(100vh-320px)]" id="chat-messages-scrollarea">
                 {chatMessages.map((msg, idx) => {
                   const isUser = msg.sender === 'user';
                   return (
