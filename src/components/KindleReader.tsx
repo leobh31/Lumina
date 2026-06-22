@@ -852,43 +852,99 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         </div>
 
         {/* Page turn controls and bottom tracking */}
-        <footer className={`px-6 py-4 border-t ${activeStyles.border} flex items-center justify-between font-sans text-xs`} id="kindle-footer">
-          <button
-            onClick={() => setRelativePageIndex(prev => Math.max(0, prev - 1))}
-            disabled={relativePageIndex === 0}
-            className={`px-3 py-1.5 border border-black/15 flex items-center gap-1 transition select-none rounded-none cursor-pointer ${
-              relativePageIndex === 0 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04]`
-            }`}
-          >
-            <ChevronLeft className="w-4 h-4" /> Anterior
-          </button>
+        <footer className={`px-4 py-4 border-t ${activeStyles.border} flex flex-col sm:flex-row items-center gap-4 sm:justify-between font-sans text-xs`} id="kindle-footer">
+          <div className="flex items-center justify-between w-full sm:w-auto gap-4">
+            <button
+              onClick={() => {
+                setRelativePageIndex(prev => Math.max(0, prev - 1));
+                setCustomSelectedText('');
+              }}
+              disabled={relativePageIndex === 0}
+              className={`px-4 py-2.5 min-h-[44px] border border-black/15 flex items-center justify-center gap-1.5 transition rounded-sm cursor-pointer font-bold ${
+                relativePageIndex === 0 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04] active:bg-black/[0.08]`
+              }`}
+            >
+              <ChevronLeft className="w-4 h-4 shrink-0" /> Anterior
+            </button>
+
+            {/* Quick direct page circles row (mobile only) */}
+            <div className="flex items-center gap-1.5 sm:hidden">
+              {passages.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setRelativePageIndex(idx);
+                    setCustomSelectedText('');
+                  }}
+                  className={`w-9 h-9 min-h-[36px] flex items-center justify-center text-xs font-extrabold rounded-sm border transition cursor-pointer ${
+                    relativePageIndex === idx
+                      ? 'bg-[#5A5A40] text-white border-transparent shadow-sm'
+                      : 'border-black/10 hover:border-black/30 dark:border-white/10 text-stone-750 dark:text-stone-300'
+                  }`}
+                >
+                  {idx + 1}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => {
+                setRelativePageIndex(prev => Math.min(passages.length - 1, prev + 1));
+                setCustomSelectedText('');
+              }}
+              disabled={relativePageIndex === passages.length - 1}
+              className={`px-4 py-2.5 min-h-[44px] border border-black/15 flex items-center justify-center gap-1.5 transition rounded-sm cursor-pointer font-bold ${
+                relativePageIndex === passages.length - 1 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04] active:bg-black/[0.08]`
+              }`}
+            >
+              Próxima <ChevronRight className="w-4 h-4 shrink-0" />
+            </button>
+          </div>
 
           {/* Kindle Progress bar footer */}
-          <div className="text-center font-mono opacity-80 flex flex-col items-center">
-            <span>PÁGINA {relativePageIndex + 1} DE {passages.length}</span>
-            <button
-              onClick={() => setShowCompanionOnMobile(true)}
-              className="md:hidden mt-1 px-3 py-1 bg-[#5A5A40]/10 text-[#5A5A40] hover:bg-[#5A5A40]/20 border border-[#5A5A40]/20 rounded-sm text-[9px] uppercase tracking-wider flex items-center gap-1 font-bold shadow-sm"
-            >
-              <Sparkles className="w-3 h-3" /> Dossiê e IA
-            </button>
-            <div className="w-24 bg-black/10 dark:bg-white/10 h-1 mt-1 overflow-hidden rounded-sm hidden xs:block">
+          <div className="text-center font-mono opacity-85 flex flex-col items-center w-full sm:w-auto">
+            <div className="hidden sm:flex flex-col items-center">
+              <span className="font-bold">PÁGINA {relativePageIndex + 1} DE {passages.length}</span>
+              
+              {/* Desktop direct selector button row */}
+              <div className="flex items-center gap-1 mt-1.5">
+                {passages.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setRelativePageIndex(idx);
+                      setCustomSelectedText('');
+                    }}
+                    title={`Ir para a página ${idx + 1}`}
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded-sm border transition cursor-pointer ${
+                      relativePageIndex === idx
+                        ? 'bg-[#5A5A40] text-white border-transparent'
+                        : 'border-black/10 hover:border-black/35 dark:border-white/10 text-[#5A5A40] dark:text-[#D0CB9E]'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 sm:hidden w-full justify-center">
+              <span className="text-xs font-bold font-mono">PÁG. {relativePageIndex + 1} / {passages.length}</span>
+              <button
+                onClick={() => setShowCompanionOnMobile(true)}
+                className="px-3.5 py-1.5 bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-stone-850 dark:text-stone-300 hover:bg-[#5A5A40]/20 border border-[#5A5A40]/25 rounded-md text-[10px] uppercase tracking-wider flex items-center gap-1 font-bold shadow-sm cursor-pointer transition"
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Dossiê e IA
+              </button>
+            </div>
+
+            <div className="w-24 bg-black/10 dark:bg-white/10 h-1 mt-2 overflow-hidden rounded-sm hidden xs:block">
               <div 
                 className="bg-[#5A5A40] h-full" 
                 style={{ width: `${((relativePageIndex + 1) / passages.length) * 100}%` }}
               ></div>
             </div>
           </div>
-
-          <button
-            onClick={() => setRelativePageIndex(prev => Math.min(passages.length - 1, prev + 1))}
-            disabled={relativePageIndex === passages.length - 1}
-            className={`px-3 py-1.5 border border-black/15 flex items-center gap-1 transition select-none rounded-none cursor-pointer ${
-              relativePageIndex === passages.length - 1 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04]`
-            }`}
-          >
-            Próxima <ChevronRight className="w-4 h-4" />
-          </button>
         </footer>
 
       </div>
@@ -965,6 +1021,32 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
           
           {/* Active selection focus and paste overlay widget */}
           <div className={`p-3 rounded-sm border ${activeStyles.border} ${theme === 'charcoal' ? 'bg-stone-800/60' : 'bg-[#5A5A40]/5'} font-sans text-xs space-y-2 shrink-0`}>
+            
+            {/* Quick direct page switcher within companion */}
+            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5 text-[11px] font-sans">
+              <span className="opacity-75 font-semibold">Mudar de Página:</span>
+              <div className="flex items-center gap-1">
+                {passages.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setRelativePageIndex(idx);
+                      setCustomSelectedText('');
+                      triggerToast(`Você mudou para a página ${idx + 1}`);
+                    }}
+                    title={`Ir para a página ${idx + 1}`}
+                    className={`px-2 py-1 text-[10px] min-w-[24px] text-center font-bold rounded-sm border transition cursor-pointer ${
+                      relativePageIndex === idx
+                        ? 'bg-[#5A5A40] text-white border-transparent'
+                        : 'border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/20 text-stone-700 dark:text-stone-300 bg-white/20 dark:bg-stone-900/40'
+                    }`}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase font-bold tracking-wider text-[#5A5A40] dark:text-[#D0CB9E] flex items-center gap-1.5 font-sans">
                 {customSelectedText ? "🎯 Trecho Personalizado Ativo" : "📖 Trecho da Página Inteira"}
