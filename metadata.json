@@ -1,0 +1,6 @@
+{
+  "name": "Lumina",
+  "description": "Aplicativo de leitura Lumina para acompanhar livros em andamento, trilhas de aprendizado e categorias literárias e filosóficas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
