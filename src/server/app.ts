@@ -39,23 +39,23 @@ app.post("/api/gemini/explain", async (req, res) => {
     }
 
     let prompt = "";
-    const systemInstruction = "Você é um professor acadêmico de literatura, história e filosofia extremamente brilhante, sensível, erudito e didático.";
+    const systemInstruction = "Você é um professor de literatura, história e filosofia extremamente brilhante, didático, altamente conciso, objetivo e direto ao ponto. Suas explicações devem ser curtas, sem rodeios ou floreios, divididas em parágrafos pequenos e de leitura confortável e ágil em telas de celular. Nunca use termos desnecessariamente prolixos e limite-se ao essencial sem sacrificar a profundidade clássica.";
 
     if (mode === "meaning") {
       prompt = `Analise o seguinte trecho do livro "${title}" escrito por ${author || 'Autor Desconhecido'}.
       Trecho: "${passage}"
       
-      Explique em profundidade "O que o autor quis dizer?" com esse trecho. Aborde as entrelinhas, as metáforas, a intenção intelectual do autor e o impacto existencial ou filosófico desse pensamento. Formate a resposta de forma fluida, dividida em parágrafos elegantes e fáceis de ler no Kindle.`;
+      Explique de forma objetiva, direta e profunda "O que o autor quis dizer?". Seja conciso, focando no essencial em no máximo 2 ou 3 parágrafos curtos. Aborde as entrelinhas, a real intenção e o impacto prático/filosófico do pensamento de forma clara e instigante.`;
     } else if (mode === "simple") {
       prompt = `Leia o seguinte trecho do livro "${title}" escrito por ${author || 'Autor Desconhecido'}.
       Trecho: "${passage}"
       
-      Explique de forma simplificada, acessível e cativante o significado desse pensamento para um iniciante completo. Use analogias ricas e cotidianas, retire o tecnicismo ou jargão excessivo e resuma a mensagem fundamental de modo amigável e esclarecedor.`;
+      Explique de forma altamente simplificada, rápida e acessível o significado desse pensamento para um leitor leigo ou iniciante. Use uma analogia cotidiana curta, retire qualquer jargão técnico e resuma a mensagem fundamental de forma ultraobjetiva em no máximo 2 parágrafos breves.`;
     } else if (mode === "historical") {
       prompt = `Considere o seguinte trecho do livro "${title}" de ${author || 'Autor Desconhecido'}.
       Trecho: "${passage}"
       
-      Apresente o "Contexto histórico" desta passagem e da respectiva obra. O que estava ocorrendo na sociedade, correntes intelectuais da época ou na própria vida do autor que impulsionou esse tipo de reflexão clássica? Explique as origens históricas dessa visão.`;
+      Apresente de maneira resumida e ágil o "Contexto histórico" desta passagem e da obra. O que estava ocorrendo na época ou na vida do autor que motivou essa reflexão? Vá direto ao ponto em no máximo 2 parágrafos curtos.`;
     } else {
       return res.status(400).json({ error: "Modo inválido. Escolha entre 'meaning', 'simple' ou 'historical'." });
     }
@@ -97,10 +97,10 @@ app.post("/api/gemini/chat", async (req, res) => {
       });
     }
 
-    const systemInstruction = `Você é um mentor intelectual, filósofo e crítico literário extraordinariamente sensível e erudito. 
-Seu papel é ajudar o leitor a "conversar" com o trecho de um livro de forma dialógica e direta.
-Você deve responder à pergunta do leitor de maneira profunda, mas conversacional, interpretando a questão SEMPRE através das lentes intelectuais do livro, do autor e do trecho específico fornecido.
-Caso o leitor pergunte sobre aplicações contemporâneas (como por exemplo "Isso se aplica à ansiedade moderna?"), ligue os argumentos do autor de forma criativa, filosófica e profunda com o cotidiano do leitor.`;
+    const systemInstruction = `Você é um mentor intelectual, filósofo e crítico literário extraordinariamente dinâmico, didático e direto. 
+Seu papel é ajudar o leitor a "conversar" com o trecho de um livro de forma dialógica, instigante e rápida.
+Você deve responder de maneira objetiva, clara para iniciantes e resumida em no máximo 1 ou 2 parágrafos curtos.
+Evite longos discursos acadêmicos ou respostas exaustivas. Interaja de forma acolhedora, relacionando a filosofia com o cotidiano do leitor de maneira cirúrgica e enxuta.`;
 
     // Build discussion context
     let textContext = `Livro: "${title}"\nAutor: ${author || "Autor Desconhecido"}\nTrecho Ativo sobre o qual discutimos:\n"${passage}"\n\n`;

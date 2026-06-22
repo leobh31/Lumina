@@ -46,6 +46,32 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  // --- Custom Reading Selection & Interactive Paste ---
+  const [customSelectedText, setCustomSelectedText] = useState<string>('');
+  const [isPastingText, setIsPastingText] = useState<boolean>(false);
+  const [pasteAreaValue, setPasteAreaValue] = useState<string>('');
+  const [showToast, setShowToast] = useState<string | null>(null);
+
+  const triggerToast = (msg: string) => {
+    setShowToast(msg);
+    setTimeout(() => {
+      setShowToast((prev) => (prev === msg ? null : prev));
+    }, 4500);
+  };
+
+  const handleCaptureSelection = () => {
+    const selection = window.getSelection();
+    const selectionText = selection?.toString();
+    if (selectionText && selectionText.trim()) {
+      setCustomSelectedText(selectionText.trim());
+      setActiveTab('dossier');
+      setShowCompanionOnMobile(true);
+      triggerToast("Excelente! Trecho carregado no X-Ray. Escolha uma das ações inteligentes da IA abaixo.");
+    } else {
+      triggerToast("Por favor, selecione (marque em azul) primeiro um trecho do livro antes de usar este recurso.");
+    }
+  };
+
   // --- Mobile responsivity toggle ---
   const [showCompanionOnMobile, setShowCompanionOnMobile] = useState<boolean>(false);
 
@@ -158,19 +184,23 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
     }
   }, [relativePageIndex]);
 
-  // Reset or seed conversation when passage index changes
+  // Reset or seed conversation when passage index or custom text selection changes
   useEffect(() => {
     setChatMessages([]);
     if (activeTab === 'chat') {
+      const textIntro = customSelectedText 
+        ? `Olá! Sou o mentor do e-reader Lumina.\n\nIdentifiquei que você selecionou um trecho específico do livro para debater:\n\n*"${customSelectedText}"*\n\nComo esse trecho específico se conecta com sua vida prática, ou qual é a sua dúvida analítica sobre ele? Pergunte-me diretamente abaixo!`
+        : `Olá! Sou o mentor de Lumina.\n\nVamos debater de forma ativa este trecho de *"${book.title}"* de *${book.author || "Autor Desconhecido"}* (Página ${currentPassage.pageNumber}).\n\nComo esse pensamento reverbera na sua vida prática ou na modernidade? Você pode perguntar se ele se aplica à ansiedade moderna ou escrever sua dúvida abaixo!`;
+
       setChatMessages([
         {
           sender: 'assistant',
-          text: `Olá! Sou o mentor de Lumina.\n\nVamos debater de forma ativa este trecho de *"${book.title}"* de *${book.author || "Autor Desconhecido"}* (Página ${currentPassage.pageNumber}).\n\nComo esse pensamento reverbera na sua vida prática ou na modernidade? Você pode perguntar se ele se aplica à ansiedade moderna ou escrever sua dúvida abaixo!`,
+          text: textIntro,
           timestamp: new Date()
         }
       ]);
     }
-  }, [relativePageIndex]);
+  }, [relativePageIndex, customSelectedText, activeTab]);
 
   // Keep chat scrolled down smoothly
   useEffect(() => {
@@ -361,7 +391,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         body: JSON.stringify({
           title: book.title,
           author: book.author,
-          passage: currentPassage.text,
+          passage: customSelectedText || currentPassage.text,
           mode: mode
         })
       });
@@ -408,7 +438,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         body: JSON.stringify({
           title: book.title,
           author: book.author,
-          passage: currentPassage.text,
+          passage: customSelectedText || currentPassage.text,
           question: msgText,
           history: chatMessages.slice(-8) // Take last 8 turns of context to stay under prompt limits safely
         })
@@ -445,6 +475,21 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   return (
     <div className={`fixed inset-0 z-50 flex flex-col md:flex-row ${activeStyles.bg} selection:bg-stone-400/30 overflow-hidden font-serif`} id="kindle-container">
       
+      {/* Dynamic interactive Toast alerts */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-20 left-1/2 -translate-x-1/2 z-[100] px-4 py-2.5 bg-neutral-900 text-neutral-100 dark:bg-stone-100 dark:text-stone-900 rounded-sm font-sans text-xs border border-neutral-700/50 dark:border-stone-200 shadow-xl flex items-center gap-2 max-w-[90%] text-center"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            <span className="font-semibold">{showToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* LEFT AREA: Kindle E-ink Screen Frame */}
       <div className={`flex-grow flex flex-col justify-between h-full border-r ${activeStyles.border} relative`} id="kindle-screen-main">
         
@@ -663,6 +708,47 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               <span className="font-mono">Pág. {currentPassage.pageNumber}</span>
             </div>
 
+            {/* Selection/Cursor Capture Toolbar */}
+            <div className={`mb-6 p-3 rounded-sm border border-dashed ${activeStyles.border} bg-black/[0.015] dark:bg-white/[0.015] flex flex-col xs:flex-row items-center justify-between gap-3 text-xs font-sans`}>
+              <div className="flex items-center gap-2 text-left">
+                <Sparkles className="w-4 h-4 text-[#5A5A40] shrink-0" />
+                <span className="opacity-95 leading-relaxed text-[11px]">
+                  {customSelectedText ? (
+                    <span>
+                      🎯 Trecho personalizado ativo (<strong className="underline font-bold text-[#5A5A40]">clique em X-Ray</strong> no painel para estudar).
+                    </span>
+                  ) : (
+                    <span>
+                      💡 <strong>Estudo Ativo:</strong> Marque qualquer parágrafo do livro com o cursor e clique em <b>Usar Seleção</b>!
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 w-full xs:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleCaptureSelection}
+                  className="px-3 py-1.5 bg-[#5A5A40] text-white font-bold uppercase tracking-wider rounded-sm text-[10px] hover:bg-[#4A4A33] transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  title="Usar o texto selecionado em azul"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Usar Seleção
+                </button>
+                {customSelectedText && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomSelectedText('');
+                      triggerToast("Você retornou para o estudo da página inteira.");
+                    }}
+                    className="p-1 px-2 border border-red-500/20 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white transition rounded-sm text-[10px] cursor-pointer"
+                    title="Limpar seleção ativa"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </div>
+
             {/* Main book text with custom sizes */}
             <p 
               className={`${getFontFamilyClass(fontFamily)} leading-[1.7] tracking-normal break-words whitespace-pre-line text-justify`}
@@ -875,11 +961,94 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         </div>
 
         {/* Panel Content Area (Assorted view of analysis output or chat output) */}
-        <div className="flex-grow p-5 overflow-y-auto space-y-4 flex flex-col justify-between" id="smart-panel-body">
+        <div className="flex-grow p-4 md:p-5 overflow-y-auto space-y-4 flex flex-col justify-between" id="smart-panel-body">
+          
+          {/* Active selection focus and paste overlay widget */}
+          <div className={`p-3 rounded-sm border ${activeStyles.border} ${theme === 'charcoal' ? 'bg-stone-800/60' : 'bg-[#5A5A40]/5'} font-sans text-xs space-y-2 shrink-0`}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-[#5A5A40] dark:text-[#D0CB9E] flex items-center gap-1.5 font-sans">
+                {customSelectedText ? "🎯 Trecho Personalizado Ativo" : "📖 Trecho da Página Inteira"}
+              </span>
+              <div className="flex items-center gap-2">
+                {customSelectedText && (
+                  <button
+                    onClick={() => {
+                      setCustomSelectedText('');
+                      triggerToast("Você retornou para o estudo da página inteira.");
+                    }}
+                    className="text-[9px] text-red-650 dark:text-red-400 uppercase font-extrabold hover:underline transition cursor-pointer"
+                  >
+                    Anular Trecho
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="p-2 border-l-2 border-[#5A5A40] bg-black/[0.015] dark:bg-white/[0.01] max-h-[85px] overflow-y-auto">
+              <p className="text-[11px] font-serif italic leading-relaxed opacity-95 text-stone-700 dark:text-stone-300">
+                "{customSelectedText || currentPassage.text}"
+              </p>
+            </div>
+
+            {/* Custom Paste controller */}
+            <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-col gap-2">
+              {!isPastingText ? (
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="opacity-65">Tem outro trecho? Cole e estude:</span>
+                  <button
+                    onClick={() => {
+                      setIsPastingText(true);
+                      setPasteAreaValue(customSelectedText || '');
+                    }}
+                    className="text-[#5A5A40] dark:text-stone-300 font-extrabold uppercase tracking-wide hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    ✍️ Copiar & Colar
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2 text-left">
+                  <textarea
+                    value={pasteAreaValue}
+                    onChange={(e) => setPasteAreaValue(e.target.value)}
+                    placeholder="Cole aqui o trecho complicado do livro que deseja estudar por voz e texto..."
+                    className="w-full text-[11px] p-2 leading-relaxed border border-black/15 dark:border-white/10 rounded-sm bg-white dark:bg-stone-900 font-serif focus:outline-none focus:border-[#5A5A40] text-stone-800 dark:text-stone-100 h-16 min-h-[50px] resize-none"
+                  />
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => {
+                        setIsPastingText(false);
+                        setPasteAreaValue('');
+                      }}
+                      className="px-2 py-1 text-[9px] uppercase font-bold hover:bg-black/5 text-stone-500 transition cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (pasteAreaValue.trim()) {
+                          setCustomSelectedText(pasteAreaValue.trim());
+                          setIsPastingText(false);
+                          setPasteAreaValue('');
+                          setActiveTab('dossier');
+                          triggerToast("Sucesso! Trecho customizado definido como escopo do X-Ray.");
+                        } else {
+                          triggerToast("Insira um texto válido antes de fixar!");
+                        }
+                      }}
+                      className="px-3 py-1 bg-[#5A5A40] text-white text-[9px] uppercase font-bold rounded-sm hover:bg-[#4A4A33] transition cursor-pointer"
+                    >
+                      Estudar este Trecho
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {activeTab === 'chat' ? (
             <div className="flex flex-col h-full justify-between gap-4" id="chat-tab-panel">
               {/* Messages viewport */}
-              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[45vh] md:max-h-[calc(100vh-320px)]" id="chat-messages-scrollarea">
+              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[35vh] md:max-h-[calc(100vh-420px)]" id="chat-messages-scrollarea">
                 {chatMessages.map((msg, idx) => {
                   const isUser = msg.sender === 'user';
                   return (
