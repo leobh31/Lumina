@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Book } from '../types';
-import { X, Check } from 'lucide-react';
+import { X, Check, Upload, FileText, CheckCircle2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AddBookModalProps {
@@ -18,6 +18,70 @@ const COVERS = [
   { name: 'Ébano Nobre', value: 'linear-gradient(135deg, #1c1917, #0c0a09)' } // luxury black
 ];
 
+const parseTxtToPassages = (rawText: string): { pageNumber: number; chapterTitle: string; text: string }[] => {
+  const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const paragraphs = text.split('\n\n').map(p => p.trim()).filter(Boolean);
+  
+  const passages: { pageNumber: number; chapterTitle: string; text: string }[] = [];
+  let currentChapter = "Capítulo I";
+  let currentPageText = "";
+  let pageNumber = 1;
+  const MAX_CHAR_PER_PAGE = 850; // Comfortable readable size
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i];
+    
+    const isChapterHeader = 
+      p.length < 60 && 
+      (/^(capítulo|capitulo|chapter|parte|seção|secao|introdução|introducao|livro|prologo|prólogo|epílogo|epilogo)\b/i.test(p) ||
+       (/^[IVXLCDM\d\s\.\:\-]+$/i.test(p) && p.length < 30));
+      
+    if (isChapterHeader) {
+      if (currentPageText.trim()) {
+        passages.push({
+          pageNumber,
+          chapterTitle: currentChapter,
+          text: currentPageText.trim()
+        });
+        pageNumber++;
+        currentPageText = "";
+      }
+      currentChapter = p;
+      continue;
+    }
+
+    if (currentPageText.length + p.length > MAX_CHAR_PER_PAGE && currentPageText.trim()) {
+      passages.push({
+        pageNumber,
+        chapterTitle: currentChapter,
+        text: currentPageText.trim()
+      });
+      pageNumber++;
+      currentPageText = p;
+    } else {
+      currentPageText = currentPageText ? currentPageText + "\n\n" + p : p;
+    }
+  }
+
+  if (currentPageText.trim()) {
+    passages.push({
+      pageNumber,
+      chapterTitle: currentChapter,
+      text: currentPageText.trim()
+    });
+  }
+
+  if (passages.length === 0) {
+    passages.push({
+      pageNumber: 1,
+      chapterTitle: "Capítulo Único",
+      text: text.trim() || "Sem conteúdo."
+    });
+  }
+
+  return passages;
+};
+
 export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -25,6 +89,84 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
   const [totalPages, setTotalPages] = useState<number>(200);
   const [initialStatus, setInitialStatus] = useState<'reading' | 'want-to-read'>('reading');
   const [coverColor, setCoverColor] = useState(COVERS[0].value);
+
+  // File Upload states
+  const [uploadedPassages, setUploadedPassages] = useState<{ pageNumber: number; chapterTitle: string; text: string }[] | undefined>(undefined);
+  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const processFile = (file: File) => {
+    if (file.type !== 'text/plain' && !file.name.endsWith('.txt')) {
+      setUploadError('Por favor, envie um arquivo de texto (.txt).');
+      return;
+    }
+
+    setUploadError('');
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (!text) {
+        setUploadError('O arquivo de texto está vazio.');
+        return;
+      }
+
+      const passages = parseTxtToPassages(text);
+      if (passages.length === 0) {
+        setUploadError('Não foi possível extrair páginas do arquivo de texto.');
+        return;
+      }
+
+      setUploadedPassages(passages);
+      setUploadedFileName(file.name);
+      
+      // Auto-populate Title if not already set by the user
+      if (!title) {
+        const cleanName = file.name
+          .replace(/\.txt$/i, '')
+          .replace(/[-_]/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+        setTitle(cleanName);
+      }
+      
+      // Auto-set total pages
+      setTotalPages(passages.length);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setUploadedPassages(undefined);
+    setUploadedFileName('');
+    setUploadError('');
+  };
 
   if (!isOpen) return null;
 
@@ -40,7 +182,8 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
       currentPage: initialStatus === 'reading' ? 1 : 0,
       coverColor,
       status: initialStatus,
-      notes: ''
+      notes: '',
+      uploadedPassages
     });
 
     // Reset fields
@@ -50,6 +193,9 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
     setTotalPages(200);
     setInitialStatus('reading');
     setCoverColor(COVERS[0].value);
+    setUploadedPassages(undefined);
+    setUploadedFileName('');
+    setUploadError('');
     onClose();
   };
 
@@ -90,6 +236,69 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* File Upload Area */}
+            <div className="bg-stone-50/50 rounded-2xl border border-dashed border-stone-200 p-4 transition-all duration-200 hover:bg-stone-50">
+              <label className="block text-xs uppercase font-mono tracking-wider text-stone-500 font-bold mb-1.5">
+                Carregar Arquivo TXT (Opcional)
+              </label>
+              
+              {!uploadedFileName ? (
+                <div 
+                  onDragEnter={handleDrag}
+                  onDragOver={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDrop={handleDrop}
+                  className={`flex flex-col items-center justify-center py-4 px-2 rounded-xl border border-stone-100 transition cursor-pointer text-center ${
+                    dragActive ? 'bg-amber-50/40 border-amber-300' : 'bg-white'
+                  }`}
+                  onClick={() => document.getElementById('txt-file-input')?.click()}
+                >
+                  <input
+                    type="file"
+                    id="txt-file-input"
+                    accept=".txt"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <Upload className="w-6 h-6 text-stone-400 mb-1.5" />
+                  <span className="text-xs font-sans font-semibold text-stone-700">
+                    Arraste ou clique para selecionar (.txt)
+                  </span>
+                  <span className="text-[10px] text-stone-400 font-sans mt-0.5">
+                    O aplicativo dividirá sua obra em páginas de leitura fluida.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-2.5 bg-emerald-50/40 border border-emerald-100 rounded-xl">
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <FileText className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div className="text-left overflow-hidden w-full">
+                      <p className="text-xs font-sans font-bold text-stone-800 truncate m-0">
+                        {uploadedFileName}
+                      </p>
+                      <p className="text-[10px] font-sans text-emerald-700 m-0">
+                        Sucesso! {uploadedPassages?.length} páginas geradas.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveFile}
+                    className="p-1 hover:bg-emerald-100/50 rounded-lg text-emerald-600 transition shrink-0"
+                    title="Excluir arquivo"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {uploadError && (
+                <p className="text-[10.5px] font-medium text-red-600 mt-1.5 font-sans">
+                  {uploadError}
+                </p>
+              )}
+            </div>
+
             {/* Title */}
             <div>
               <label className="block text-xs uppercase font-mono tracking-wider text-stone-500 font-bold mb-1.5">

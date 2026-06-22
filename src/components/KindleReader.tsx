@@ -37,7 +37,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
   // --- Reading Progression ---
-  const passages = getBookPassages(book.id, book.title, book.author);
+  const passages = getBookPassages(book);
   const [relativePageIndex, setRelativePageIndex] = useState<number>(0);
 
   // --- AI Explanations Board ---

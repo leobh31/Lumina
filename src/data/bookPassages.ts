@@ -129,6 +129,16 @@ export const FALLBACK_PASSAGES = (title: string, author: string): PassagePage[] 
   }
 ];
 
-export function getBookPassages(bookId: string, title: string, author: string): PassagePage[] {
-  return BOOK_PASSAGES[bookId] || FALLBACK_PASSAGES(title, author);
+export function getBookPassages(
+  bookOrId: string | { id: string; title: string; author: string; uploadedPassages?: PassagePage[] },
+  title?: string,
+  author?: string
+): PassagePage[] {
+  if (typeof bookOrId === 'object') {
+    if (bookOrId.uploadedPassages && bookOrId.uploadedPassages.length > 0) {
+      return bookOrId.uploadedPassages;
+    }
+    return BOOK_PASSAGES[bookOrId.id] || FALLBACK_PASSAGES(bookOrId.title, bookOrId.author);
+  }
+  return BOOK_PASSAGES[bookOrId] || FALLBACK_PASSAGES(title || '', author || '');
 }

@@ -11,6 +11,11 @@ export interface Book {
   notes?: string;
   startDate?: string;
   lastReadDate?: string;
+  uploadedPassages?: {
+    pageNumber: number;
+    chapterTitle: string;
+    text: string;
+  }[];
 }
 
 export interface PathStep {
