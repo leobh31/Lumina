@@ -60,7 +60,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
   // --- Kokoro TTS Player State ---
   const [ttsEngine, setTtsEngine] = useState<'kokoro' | 'native'>('kokoro');
-  const [kokoroVoice, setKokoroVoice] = useState<string>('af_sarah');
+  const [kokoroVoice, setKokoroVoice] = useState<string>('pt_neural');
   const [isTtsLoading, setIsTtsLoading] = useState<boolean>(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -594,16 +594,16 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                 {ttsEngine === 'kokoro' ? (
                   <div className="space-y-2">
                     <p className="text-[10px] text-stone-500 dark:text-stone-400">
-                      O Kokoro gera vozes neurais realistas e humanas de estúdio (sotaque inglês/americano):
+                      Vozes Neurais de Alta Fidelidade (Super Realista):
                     </p>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5 text-[10.5px]">
                       {[
-                        { id: 'af_sarah', label: 'Sarah 🇺🇸 (Narradora)' },
-                        { id: 'af_bella', label: 'Bella 🇺🇸 (Leitora Suave)' },
-                        { id: 'af_sky', label: 'Sky 🇺🇸 (Clássica)' },
-                        { id: 'am_michael', label: 'Michael 🇺🇸 (Erudito)' },
-                        { id: 'bf_emma', label: 'Emma 🇬🇧 (Fina Britânica)' },
-                        { id: 'bm_george', label: 'George 🇬🇧 (Erudito)' }
+                        { id: 'pt_neural', label: 'Voz Neural 🇧🇷 (Principal)' },
+                        { id: 'pt_maria', label: 'Maria 🇧🇷 (Suave)' },
+                        { id: 'pt_felipe', label: 'Felipe 🇧🇷 (Masculina)' },
+                        { id: 'af_sarah', label: 'Sarah 🇺🇸 (Inglês)' },
+                        { id: 'bf_emma', label: 'Emma 🇬🇧 (Britânico)' },
+                        { id: 'es_isabella', label: 'Isabella 🇪🇸 (Espanhol)' }
                       ].map((v) => (
                         <button
                           key={v.id}

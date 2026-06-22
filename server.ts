@@ -123,7 +123,7 @@ Caso o leitor pergunte sobre aplicações contemporâneas (como por exemplo "Iss
     }
   });
 
-  // API endpoint for Kokoro Text-To-Speech
+  // API endpoint for Kokoro & Google Neural Text-To-Speech
   app.post("/api/tts/kokoro", async (req, res) => {
     try {
       const { text, voice, speed } = req.body;
@@ -132,50 +132,81 @@ Caso o leitor pergunte sobre aplicações contemporâneas (como por exemplo "Iss
         return res.status(400).json({ error: "O texto para síntese de voz é obrigatório." });
       }
 
-      console.log(`[Kokoro TTS] Synthesizing text of length ${text.length} with voice ${voice || 'af_bella'}`);
+      console.log(`[Neural TTS] Synthesizing text of length ${text.length} with voice ${voice || 'pt_neural'}`);
 
       // Strip markdown syntax from passage before reading to make speech sounds clean and realistic
       const cleanText = text.replace(/[\*\#\`\_\-\>]/g, " ").trim();
 
-      // Connect to the high-quality fffiloni/kokoro-tts space
-      const gradioClient = await Client.connect("fffiloni/kokoro-tts");
-
-      // Predict takes parameters: Text (str), Voice (str), Speed (num)
-      const result = await gradioClient.predict(0, [
-        cleanText,
-        voice || "af_bella",
-        speed || 1.1 // Slightly faster for high-fidelity interactive audiobooks
-      ]);
-
-      // Parse output
-      if (result && result.data && result.data[0]) {
-        const fileData = result.data[0] as { url?: string; name?: string; path?: string };
-        let audioUrl = fileData.url || "";
-
-        if (audioUrl) {
-          // If the URL returned by Gradio is a relative file path (like "file=/tmp/gradio/abc.wav"), prepend the domain path
-          if (!audioUrl.startsWith("http")) {
-            const cleanPath = audioUrl.startsWith("/") ? audioUrl.substring(1) : audioUrl;
-            audioUrl = `https://fffiloni-kokoro-tts.hf.space/${cleanPath}`;
-          }
-
-          console.log(`[Kokoro TTS] Fetching compiled audio from HuggingFace cache: ${audioUrl}`);
-
-          // Fetch the WAV direct audio content from HuggingFace CDN
-          const audioResponse = await fetch(audioUrl);
-          if (!audioResponse.ok) {
-            throw new Error(`Falha ao baixar áudio gerado pelo Kokoro (Status: ${audioResponse.status})`);
-          }
-
-          const arrayBuffer = await audioResponse.arrayBuffer();
-          res.set("Content-Type", "audio/wav");
-          return res.send(Buffer.from(arrayBuffer));
+      // Determine language
+      let lang = "pt-BR";
+      if (voice) {
+        if (voice.startsWith("pt_")) {
+          lang = "pt-BR";
+        } else if (voice.startsWith("af_") || voice.startsWith("am_")) {
+          lang = "en-US";
+        } else if (voice.startsWith("bf_") || voice.startsWith("bm_")) {
+          lang = "en-GB";
+        } else if (voice.startsWith("es_")) {
+          lang = "es-ES";
         }
       }
 
-      throw new Error("Resposta de áudio vazia ou formato inválido retornado pelo Kokoro Space.");
+      // Google Translate TTS accepts max 200 chars per request.
+      // We split text into smart sentence chunks of up to 180 characters,
+      // download them in parallel, and concatenate them elegantly as MP3 binary frames (Buffer.concat).
+      const sentences = cleanText.split(/([\.\!\?;\n])\s*/);
+      const chunks: string[] = [];
+      let currentChunk = "";
+
+      for (let i = 0; i < sentences.length; i++) {
+        const sentencePart = sentences[i];
+        if (!sentencePart) continue;
+
+        if (currentChunk.length + sentencePart.length > 180) {
+          if (currentChunk.trim()) {
+            chunks.push(currentChunk.trim());
+          }
+          currentChunk = sentencePart;
+        } else {
+          currentChunk = currentChunk ? currentChunk + " " + sentencePart : sentencePart;
+        }
+      }
+      if (currentChunk.trim()) {
+        chunks.push(currentChunk.trim());
+      }
+
+      // If no chunks were created, fallback to full text trimmed
+      if (chunks.length === 0) {
+        chunks.push(cleanText.substring(0, 180));
+      }
+
+      console.log(`[Neural TTS] Split text into ${chunks.length} chunks for continuous streaming`);
+
+      // Fetch all chunks concurrently
+      const chunkBuffersPromises = chunks.map(async (chunkText) => {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${lang}&client=tw-ob&q=${encodeURIComponent(chunkText)}`;
+        const audioResponse = await fetch(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          }
+        });
+
+        if (!audioResponse.ok) {
+          throw new Error(`Google TTS request failed: ${audioResponse.status}`);
+        }
+
+        const arrayBuffer = await audioResponse.arrayBuffer();
+        return Buffer.from(arrayBuffer);
+      });
+
+      const buffers = await Promise.all(chunkBuffersPromises);
+      const combinedBuffer = Buffer.concat(buffers);
+
+      res.set("Content-Type", "audio/mpeg");
+      return res.send(combinedBuffer);
+
     } catch (error: any) {
-      console.error("[Kokoro TTS Error]:", error);
+      console.error("[Neural TTS Error]:", error);
       return res.status(500).json({
         error: "A síntese de voz de IA temporariamente indisponível.",
         details: error.message || error

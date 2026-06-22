@@ -229,7 +229,16 @@ export default function App() {
           </div>
 
           {/* Quick Config Actions */}
-          <div className="flex items-center gap-3.5" id="header-action-panel">
+          <div className="flex items-center gap-3.5 animate-fade-in" id="header-action-panel">
+            <button
+              onClick={() => setIsAddBookOpen(true)}
+              className="px-3.5 py-1.5 bg-[#5A5A40] hover:bg-[#4A4A33] text-white rounded-none text-[10px] font-sans uppercase tracking-[0.1em] transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm hover:shadow-md"
+              title="Adicionar um novo livro (inclusive obras completas em formato .txt)"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Adicionar Livro (.txt)
+            </button>
+            <div className="h-4 w-px bg-black/10"></div>
             <button
               onClick={resetToSeedData}
               className="px-3 py-1.5 border border-black/10 hover:border-black/30 rounded-none text-[10px] font-sans uppercase tracking-widest text-[#1A1A1A] hover:bg-white transition flex items-center gap-1.5 font-bold cursor-pointer"
