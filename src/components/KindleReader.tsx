@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Book } from '../types';
 import { getBookPassages, PassagePage } from '../data/bookPassages';
 import { 
   X, 
   ChevronLeft, 
   ChevronRight, 
+  ChevronDown,
   Type, 
   BookOpen, 
   AudioLines, 
@@ -14,7 +15,8 @@ import {
   Play, 
   Pause, 
   Square,
-  Loader2
+  Loader2,
+  ArrowLeft
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -39,6 +41,39 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   // --- Reading Progression ---
   const passages = getBookPassages(book);
   const [relativePageIndex, setRelativePageIndex] = useState<number>(0);
+
+  // --- Touch Swipe Gestures for Mobile ---
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const diffX = touch.clientX - touchStartRef.current.x;
+    const diffY = touch.clientY - touchStartRef.current.y;
+    
+    // Check if the gesture is primarily horizontal and exceeds a threshold
+    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 60) {
+      if (diffX > 0) {
+        // Swipe Right -> Previous Page
+        if (relativePageIndex > 0) {
+          setRelativePageIndex(prev => Math.max(0, prev - 1));
+          setCustomSelectedText('');
+        }
+      } else {
+        // Swipe Left -> Next Page
+        if (relativePageIndex < passages.length - 1) {
+          setRelativePageIndex(prev => Math.min(passages.length - 1, prev + 1));
+          setCustomSelectedText('');
+        }
+      }
+    }
+    touchStartRef.current = null;
+  };
 
   // --- AI Explanations Board ---
   const [explanationMode, setExplanationMode] = useState<'meaning' | 'simple' | 'historical' | null>(null);
@@ -491,42 +526,39 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
       </AnimatePresence>
 
       {/* LEFT AREA: Kindle E-ink Screen Frame */}
-      <div className={`flex-grow flex flex-col justify-between h-full border-r ${activeStyles.border} relative`} id="kindle-screen-main">
+      <div 
+        className={`flex-grow flex flex-col justify-between h-full border-r ${activeStyles.border} relative`} 
+        id="kindle-screen-main"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         
         {/* Kindle Top Status Bar */}
-        <header className={`px-6 py-4 flex items-center justify-between border-b ${activeStyles.border} text-xs font-sans tracking-widest uppercase opacity-75`} id="kindle-header">
-          <div className="flex items-center gap-3">
-            <BookOpen className="w-4 h-4" />
-            <span className="font-extrabold truncate max-w-[200px] md:max-w-[320px]">{book.title}</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-[10px] bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-sm">
-              Paperwhite Modo
-            </span>
-            {/* Companion toggle on mobile status bar */}
-            <button 
-              type="button" 
-              onClick={() => setShowCompanionOnMobile(true)}
-              className="md:hidden p-1.5 bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-stone-800 dark:text-stone-300 rounded-full transition cursor-pointer flex items-center gap-1"
-              title="Ver Dossiê e IA"
+        <header className={`px-4 py-1.5 md:py-2 flex items-center justify-between border-b ${activeStyles.border} text-xs font-sans tracking-widest uppercase opacity-75`} id="kindle-header">
+          <div className="flex items-center">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 hover:opacity-100 opacity-80 transition duration-200 cursor-pointer font-bold text-[11px]"
+              title="Voltar para a página principal"
             >
-              <Sparkles className="w-4 h-4 text-[#5A5A40] dark:text-stone-300" />
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Voltar</span>
             </button>
+          </div>
+          
+          {/* Centered Book Title */}
+          <div className="font-semibold text-[11px] truncate max-w-[45%] text-center normal-case tracking-wide opacity-90">
+            {book.title}
+          </div>
+
+          <div className="flex items-center">
             <button 
               type="button" 
               onClick={() => setShowSettings(!showSettings)}
-              className="p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition cursor-pointer"
+              className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition cursor-pointer"
               title="Ajustar Tipografia e Temas"
             >
               <Type className="w-4 h-4" />
-            </button>
-            <button 
-              type="button" 
-              onClick={onClose}
-              className="p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition cursor-pointer"
-              title="Fechar Kindle"
-            >
-              <X className="w-4.5 h-4.5" />
             </button>
           </div>
         </header>
@@ -538,7 +570,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className={`absolute top-[52px] left-4 right-4 z-20 ${activeStyles.panelBg} border ${activeStyles.border} shadow-xl p-5 space-y-4`}
+              className={`absolute top-[40px] md:top-[44px] left-4 right-4 z-20 ${activeStyles.panelBg} border ${activeStyles.border} shadow-xl p-5 space-y-4`}
               id="kindle-settings-box"
             >
               <div className="flex justify-between items-center pb-2 border-b border-black/5">
@@ -699,56 +731,9 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         </AnimatePresence>
 
         {/* Kindle Inner Paper Content Body */}
-        <div className="flex-grow flex flex-col justify-center items-center overflow-y-auto">
+        <div className="flex-grow flex flex-col justify-start items-center overflow-y-auto pt-1 md:pt-2 pb-10">
           <div className={`max-w-3xl w-full ${getMarginClass(marginSize)} transition-all duration-300`} id="kindle-text-stage">
             
-            {/* Chapter Header within Kindle text */}
-            <div className={`border-b ${activeStyles.border} pb-2 mb-6 font-sans text-xs tracking-widest uppercase opacity-60 flex justify-between`}>
-              <span>{currentPassage.chapterTitle}</span>
-              <span className="font-mono">Pág. {currentPassage.pageNumber}</span>
-            </div>
-
-            {/* Selection/Cursor Capture Toolbar */}
-            <div className={`mb-6 p-3 rounded-sm border border-dashed ${activeStyles.border} bg-black/[0.015] dark:bg-white/[0.015] flex flex-col xs:flex-row items-center justify-between gap-3 text-xs font-sans`}>
-              <div className="flex items-center gap-2 text-left">
-                <Sparkles className="w-4 h-4 text-[#5A5A40] shrink-0" />
-                <span className="opacity-95 leading-relaxed text-[11px]">
-                  {customSelectedText ? (
-                    <span>
-                      🎯 Trecho personalizado ativo (<strong className="underline font-bold text-[#5A5A40]">clique em X-Ray</strong> no painel para estudar).
-                    </span>
-                  ) : (
-                    <span>
-                      💡 <strong>Estudo Ativo:</strong> Marque qualquer parágrafo do livro com o cursor e clique em <b>Usar Seleção</b>!
-                    </span>
-                  )}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 w-full xs:w-auto justify-end">
-                <button
-                  type="button"
-                  onClick={handleCaptureSelection}
-                  className="px-3 py-1.5 bg-[#5A5A40] text-white font-bold uppercase tracking-wider rounded-sm text-[10px] hover:bg-[#4A4A33] transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-                  title="Usar o texto selecionado em azul"
-                >
-                  <Sparkles className="w-3.5 h-3.5" /> Usar Seleção
-                </button>
-                {customSelectedText && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomSelectedText('');
-                      triggerToast("Você retornou para o estudo da página inteira.");
-                    }}
-                    className="p-1 px-2 border border-red-500/20 bg-red-500/10 text-red-600 hover:bg-red-500 hover:text-white transition rounded-sm text-[10px] cursor-pointer"
-                    title="Limpar seleção ativa"
-                  >
-                    Limpar
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* Main book text with custom sizes */}
             <p 
               className={`${getFontFamilyClass(fontFamily)} leading-[1.7] tracking-normal break-words whitespace-pre-line text-justify`}
@@ -851,100 +836,53 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
           </div>
         </div>
 
-        {/* Page turn controls and bottom tracking */}
-        <footer className={`px-4 py-4 border-t ${activeStyles.border} flex flex-col sm:flex-row items-center gap-4 sm:justify-between font-sans text-xs`} id="kindle-footer">
-          <div className="flex items-center justify-between w-full sm:w-auto gap-4">
-            <button
-              onClick={() => {
-                setRelativePageIndex(prev => Math.max(0, prev - 1));
-                setCustomSelectedText('');
-              }}
-              disabled={relativePageIndex === 0}
-              className={`px-4 py-2.5 min-h-[44px] border border-black/15 flex items-center justify-center gap-1.5 transition rounded-sm cursor-pointer font-bold ${
-                relativePageIndex === 0 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04] active:bg-black/[0.08]`
-              }`}
-            >
-              <ChevronLeft className="w-4 h-4 shrink-0" /> Anterior
-            </button>
-
-            {/* Quick direct page circles row (mobile only) */}
-            <div className="flex items-center gap-1.5 sm:hidden">
-              {passages.map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                    setRelativePageIndex(idx);
-                    setCustomSelectedText('');
-                  }}
-                  className={`w-9 h-9 min-h-[36px] flex items-center justify-center text-xs font-extrabold rounded-sm border transition cursor-pointer ${
-                    relativePageIndex === idx
-                      ? 'bg-[#5A5A40] text-white border-transparent shadow-sm'
-                      : 'border-black/10 hover:border-black/30 dark:border-white/10 text-stone-750 dark:text-stone-300'
-                  }`}
-                >
-                  {idx + 1}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => {
-                setRelativePageIndex(prev => Math.min(passages.length - 1, prev + 1));
-                setCustomSelectedText('');
-              }}
-              disabled={relativePageIndex === passages.length - 1}
-              className={`px-4 py-2.5 min-h-[44px] border border-black/15 flex items-center justify-center gap-1.5 transition rounded-sm cursor-pointer font-bold ${
-                relativePageIndex === passages.length - 1 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04] active:bg-black/[0.08]`
-              }`}
-            >
-              Próxima <ChevronRight className="w-4 h-4 shrink-0" />
-            </button>
-          </div>
+        {/* Page turn controls and bottom tracking (Desktop/Tablet) */}
+        <footer className={`hidden md:flex px-6 py-4 border-t ${activeStyles.border} items-center justify-between font-sans text-xs`} id="kindle-footer">
+          <button
+            onClick={() => setRelativePageIndex(prev => Math.max(0, prev - 1))}
+            disabled={relativePageIndex === 0}
+            className={`px-3 py-1.5 border border-black/15 flex items-center gap-1 transition select-none rounded-none cursor-pointer ${
+              relativePageIndex === 0 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04]`
+            }`}
+          >
+            <ChevronLeft className="w-4 h-4" /> Anterior
+          </button>
 
           {/* Kindle Progress bar footer */}
-          <div className="text-center font-mono opacity-85 flex flex-col items-center w-full sm:w-auto">
-            <div className="hidden sm:flex flex-col items-center">
-              <span className="font-bold">PÁGINA {relativePageIndex + 1} DE {passages.length}</span>
-              
-              {/* Desktop direct selector button row */}
-              <div className="flex items-center gap-1 mt-1.5">
-                {passages.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setRelativePageIndex(idx);
-                      setCustomSelectedText('');
-                    }}
-                    title={`Ir para a página ${idx + 1}`}
-                    className={`px-2 py-0.5 text-[10px] font-bold rounded-sm border transition cursor-pointer ${
-                      relativePageIndex === idx
-                        ? 'bg-[#5A5A40] text-white border-transparent'
-                        : 'border-black/10 hover:border-black/35 dark:border-white/10 text-[#5A5A40] dark:text-[#D0CB9E]'
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 sm:hidden w-full justify-center">
-              <span className="text-xs font-bold font-mono">PÁG. {relativePageIndex + 1} / {passages.length}</span>
-              <button
-                onClick={() => setShowCompanionOnMobile(true)}
-                className="px-3.5 py-1.5 bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-stone-850 dark:text-stone-300 hover:bg-[#5A5A40]/20 border border-[#5A5A40]/25 rounded-md text-[10px] uppercase tracking-wider flex items-center gap-1 font-bold shadow-sm cursor-pointer transition"
-              >
-                <Sparkles className="w-3.5 h-3.5" /> Dossiê e IA
-              </button>
-            </div>
-
-            <div className="w-24 bg-black/10 dark:bg-white/10 h-1 mt-2 overflow-hidden rounded-sm hidden xs:block">
+          <div className="text-center font-sans opacity-85 flex flex-col items-center max-w-[50%]">
+            <span className="font-medium tracking-wide truncate max-w-full">Pág. {currentPassage.pageNumber} • {currentPassage.chapterTitle}</span>
+            <div className="w-48 bg-black/10 dark:bg-white/10 h-[2px] mt-1.5 overflow-hidden rounded-full hidden xs:block">
               <div 
-                className="bg-[#5A5A40] h-full" 
+                className="bg-[#5A5A40] dark:bg-[#D0CB9E] h-full" 
                 style={{ width: `${((relativePageIndex + 1) / passages.length) * 100}%` }}
               ></div>
             </div>
           </div>
+
+          <button
+            onClick={() => setRelativePageIndex(prev => Math.min(passages.length - 1, prev + 1))}
+            disabled={relativePageIndex === passages.length - 1}
+            className={`px-3 py-1.5 border border-black/15 flex items-center gap-1 transition select-none rounded-none cursor-pointer ${
+              relativePageIndex === passages.length - 1 ? 'opacity-30 cursor-not-allowed' : `hover:bg-black/[0.04]`
+            }`}
+          >
+            Próxima <ChevronRight className="w-4 h-4" />
+          </button>
+        </footer>
+
+        {/* Discrete Mobile-only Footer */}
+        <footer className={`md:hidden px-4 py-2.5 border-t ${activeStyles.border} flex items-center justify-between font-sans text-[11px]`} id="kindle-footer-mobile">
+          <div className="opacity-80 font-medium truncate max-w-[60%]">
+            Pág. {currentPassage.pageNumber} • {currentPassage.chapterTitle}
+          </div>
+          
+          <button
+            onClick={() => setShowCompanionOnMobile(true)}
+            className="px-3 py-1 bg-[#5A5A40]/10 hover:bg-[#5A5A40]/20 border border-[#5A5A40]/25 text-[#5A5A40] dark:text-[#D0CB9E] rounded-full text-[10px] uppercase tracking-wider flex items-center gap-1 font-bold transition shadow-sm cursor-pointer"
+          >
+            <Sparkles className="w-3 h-3 text-[#5A5A40] dark:text-[#D0CB9E]" />
+            Dossiê de IA
+          </button>
         </footer>
 
       </div>
@@ -983,13 +921,13 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               setActiveTab('dossier');
               stopTts();
             }}
-            className={`flex-1 py-3 text-center transition border-b-2 cursor-pointer ${
+            className={`flex-grow flex items-center justify-center gap-1 py-3 text-center transition border-b-2 cursor-pointer ${
               activeTab === 'dossier' 
                 ? 'border-[#5A5A40] text-[#5A5A40] font-extrabold' 
                 : 'border-transparent text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'
             }`}
           >
-            Dossiê Rápido
+            Dossiê Origem
           </button>
           <button
             onClick={() => {
@@ -1020,7 +958,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         <div className="flex-grow p-4 md:p-5 overflow-y-auto space-y-4 flex flex-col justify-between" id="smart-panel-body">
           
           {/* Active selection focus and paste overlay widget */}
-          <div className={`p-3 rounded-sm border ${activeStyles.border} ${theme === 'charcoal' ? 'bg-stone-800/60' : 'bg-[#5A5A40]/5'} font-sans text-xs space-y-2 shrink-0`}>
+          <div className={`p-4 md:p-5 rounded-sm border ${activeStyles.border} ${theme === 'charcoal' ? 'bg-stone-800/60' : 'bg-[#5A5A40]/5'} font-sans text-xs space-y-3 transition-all duration-300 shrink-0`}>
             
             {/* Quick direct page switcher within companion */}
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5 text-[11px] font-sans">
@@ -1066,8 +1004,8 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               </div>
             </div>
 
-            <div className="p-2 border-l-2 border-[#5A5A40] bg-black/[0.015] dark:bg-white/[0.01] max-h-[85px] overflow-y-auto">
-              <p className="text-[11px] font-serif italic leading-relaxed opacity-95 text-stone-700 dark:text-stone-300">
+            <div className="p-4 md:p-5 border-l-2 border-[#5A5A40] bg-black/[0.015] dark:bg-white/[0.01] overflow-y-auto max-h-[110px]">
+              <p className="font-serif italic opacity-95 text-stone-700 dark:text-stone-300 text-sm sm:text-base leading-relaxed">
                 "{customSelectedText || currentPassage.text}"
               </p>
             </div>
@@ -1076,16 +1014,26 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
             <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-col gap-2">
               {!isPastingText ? (
                 <div className="flex items-center justify-between text-[10px]">
-                  <span className="opacity-65">Tem outro trecho? Cole e estude:</span>
-                  <button
-                    onClick={() => {
-                      setIsPastingText(true);
-                      setPasteAreaValue(customSelectedText || '');
-                    }}
-                    className="text-[#5A5A40] dark:text-stone-300 font-extrabold uppercase tracking-wide hover:underline flex items-center gap-0.5 cursor-pointer"
-                  >
-                    ✍️ Copiar & Colar
-                  </button>
+                  <span className="opacity-65">Estudo personalizado:</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleCaptureSelection}
+                      className="text-[#5A5A40] dark:text-[#D0CB9E] font-extrabold uppercase tracking-wide hover:underline flex items-center gap-0.5 cursor-pointer"
+                      title="Captura o trecho que você marcou em azul na página de leitura"
+                    >
+                      ✨ Capturar Seleção
+                    </button>
+                    <span className="opacity-30">|</span>
+                    <button
+                      onClick={() => {
+                        setIsPastingText(true);
+                        setPasteAreaValue(customSelectedText || '');
+                      }}
+                      className="text-[#5A5A40] dark:text-[#D0CB9E] font-extrabold uppercase tracking-wide hover:underline flex items-center gap-0.5 cursor-pointer"
+                    >
+                      ✍️ Digitar/Colar
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2 text-left">
@@ -1141,7 +1089,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                       <span className="text-[9px] font-sans uppercase tracking-widest opacity-60 font-bold px-1 text-stone-500">
                         {isUser ? 'Você' : `Professor Lumina (${book.author || 'Autor'})`}
                       </span>
-                      <div className={`p-3 rounded-lg text-xs leading-relaxed max-w-[90%] relative ${
+                      <div className={`p-3.5 rounded-lg text-sm sm:text-base leading-relaxed max-w-[95%] relative ${
                         isUser 
                           ? 'bg-black/[0.04] dark:bg-white/[0.04] border border-black/10 dark:border-white/10 font-sans' 
                           : `border border-[#5A5A40]/25 font-serif pl-4 relative ${activeStyles.bg}`
@@ -1206,49 +1154,53 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                     e.preventDefault();
                     handleSendChatMessage(chatInput);
                   }}
-                  className="flex items-center gap-2 border border-black/15 dark:border-white/15 p-1 bg-white dark:bg-stone-900 shadow-sm"
+                  className="flex items-center gap-1.5 border border-black/15 dark:border-white/15 p-0.5 bg-white dark:bg-stone-900 shadow-sm"
                 >
                   <input
                     type="text"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Escreva sua pergunta ou reflexão sobre o trecho..."
+                    placeholder="Faça uma pergunta sobre o trecho..."
                     disabled={isChatLoading}
-                    className="flex-grow pl-3 pr-2 py-2 text-xs font-sans bg-transparent focus:outline-none dark:text-white"
+                    className="flex-grow pl-2.5 pr-2 py-1.5 text-xs font-sans bg-transparent focus:outline-none dark:text-white"
                   />
                   <button
                     type="submit"
                     disabled={isChatLoading || !chatInput.trim()}
-                    className="px-4 py-2 bg-[#5A5A40] text-white text-[10px] uppercase tracking-widest font-bold font-sans hover:bg-[#4A4A33] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                    className="px-3 py-1.5 bg-[#5A5A40] text-white text-[10px] uppercase tracking-wider font-bold font-sans hover:bg-[#4A4A33] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
                   >
-                    Enviar
+                    Perguntar
                   </button>
                 </form>
               </div>
             </div>
           ) : (
             explanationMode === null ? (
-              /* Introductory empty card placeholder */
-              <div className="h-full flex flex-col justify-center items-center text-center space-y-4 py-8 flex-grow">
-                <div className="p-4 bg-black/5 dark:bg-white/5 rounded-full">
-                  <GraduationCap className="w-8 h-8 text-[#5A5A40]" />
+              <div className="flex-grow flex flex-col justify-center items-center py-8 px-4 text-center space-y-3">
+                <div className="w-9 h-9 rounded-full bg-[#5A5A40]/10 flex items-center justify-center">
+                  <Sparkles className="w-4.5 h-4.5 text-[#5A5A40]" />
                 </div>
-                <div className="space-y-1 max-w-xs">
-                  <h4 className="text-sm font-sans uppercase tracking-widest font-bold">Análise do Trecho Ativo</h4>
-                  <p className="text-xs opacity-75 font-serif italic text-stone-500">
-                    Selecione um dos recursos inteligentes abaixo para decifrar as entrelinhas e o contexto literário com IA.
+                <div className="space-y-0.5">
+                  <h4 className="text-xs font-sans uppercase tracking-widest font-bold text-[#5A5A40] dark:text-[#D0CB9E]">
+                    Professor Lumina
+                  </h4>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 font-serif italic max-w-[280px]">
+                    "A leitura ativa transforma a informação em sabedoria."
                   </p>
                 </div>
+                <p className="text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 max-w-[240px] font-sans">
+                  Toque em uma das ações inteligentes abaixo para obter reflexões e contexto histórico via IA, ou converse livremente na aba ao lado.
+                </p>
               </div>
             ) : (
               <div className="space-y-3 flex-grow flex flex-col justify-between">
                 <div>
                   {/* Category Subtitle of Active Assistance */}
-                  <div className="flex justify-between items-center mb-2">
+                  <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[10px] uppercase font-sans tracking-widest font-bold text-[#5A5A40] opacity-85">
-                      {explanationMode === 'meaning' && "💡 O que o autor quis dizer?"}
-                      {explanationMode === 'simple' && "🌱 Explicação Simplificada"}
-                      {explanationMode === 'historical' && "⏳ Contexto Histórico & Época"}
+                      {explanationMode === 'meaning' && "💡 Significado do Trecho"}
+                      {explanationMode === 'simple' && "🌱 Explicação Simples"}
+                      {explanationMode === 'historical' && "⏳ Contexto Histórico"}
                     </span>
                     
                     {/* Visual loading marker */}
@@ -1264,26 +1216,26 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                     {isAiLoading ? (
                       <div className="py-12 text-center text-xs font-serif italic space-y-3 opacity-60">
                         <p className="animate-pulse text-stone-500">
-                          {explanationMode === 'meaning' && "Desvendando nuances filosóficas e intenção lírica..."}
-                          {explanationMode === 'simple' && "Traduzindo prosa complexa em parábolas cotidianas..."}
-                          {explanationMode === 'historical' && "Mapeando o ano de publicação e correntes intelectuais..."}
+                          {explanationMode === 'meaning' && "Desvendando nuances filosóficas..."}
+                          {explanationMode === 'simple' && "Traduzindo para uma linguagem simples..."}
+                          {explanationMode === 'historical' && "Mapeando o contexto da obra..."}
                         </p>
                       </div>
                     ) : aiError ? (
-                      <div className="text-xs text-red-600 bg-red-50 dark:bg-red-950/20 p-3 italic">
+                      <div className="text-xs text-red-650 bg-red-50 dark:bg-red-950/20 p-3 italic">
                         <p className="font-bold">Ocorreu um erro:</p>
                         <p>{aiError}</p>
                       </div>
                     ) : (
                       /* Standard Markdown formatting lookalike using rich text or split lines */
-                      <div className={`text-xs md:text-sm font-serif space-y-2.5 whitespace-pre-line ${activeStyles.text}`} id="kindle-analysis-output">
+                      <div className={`text-sm md:text-base lg:text-[17px] font-serif space-y-3 leading-relaxed whitespace-pre-line ${activeStyles.text}`} id="kindle-analysis-output">
                         {explanationText}
                       </div>
                     )}
                   </div>
                 </div>
 
-                {/* TTS Voice Player Controls UI */}
+                {/* TTS Voice Player Controls UI - Slim and elegant horizontal bar */}
                 {(explanationText && !isAiLoading) && (
                   <div className={`p-4 border ${activeStyles.border} bg-black/5 dark:bg-white/5 space-y-3 rounded-sm`} id="voice-player-widget">
                     <div className="flex justify-between items-center">
@@ -1296,7 +1248,6 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
                     {/* Player controls */}
                     <div className="flex items-center gap-2">
-                      {/* Play/Pause Button */}
                       <button
                         type="button"
                         onClick={() => {
@@ -1315,7 +1266,6 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                         )}
                       </button>
 
-                      {/* Stop Button */}
                       {isPlayingTts && (
                         <button
                           type="button"
@@ -1353,17 +1303,12 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
         {/* Action Buttons Hub (Bottom panel side area - visible if dossier tab) */}
         {activeTab === 'dossier' && (
-          <div className={`p-4 border-t ${activeStyles.border} space-y-2 shrink-0`} id="action-buttons-hub">
-            {/* Label indicating interactive study prompt */}
-            <p className="text-[10px] font-sans uppercase tracking-[0.2em] opacity-60 text-center font-bold pb-2 text-stone-500">
-              Consulte a Obra no E-Reader
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" id="smart-reader-actions-grid">
+          <div className={`p-2.5 md:p-3 border-t ${activeStyles.border} space-y-1.5 shrink-0`} id="action-buttons-hub">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5" id="smart-reader-actions-grid">
               <button
                 onClick={() => requestAiAnalysis('meaning')}
                 disabled={isAiLoading}
-                className={`py-2.5 px-3 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer ${
+                className={`py-2 px-2.5 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer ${
                   explanationMode === 'meaning' 
                     ? activeStyles.activePillBg
                     : `border-black/10 dark:border-white/10 hover:border-black/25 ${activeStyles.buttonBg}`
@@ -1376,7 +1321,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               <button
                 onClick={() => requestAiAnalysis('simple')}
                 disabled={isAiLoading}
-                className={`py-2.5 px-3 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer ${
+                className={`py-2 px-2.5 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer ${
                   explanationMode === 'simple' 
                     ? activeStyles.activePillBg
                     : `border-black/10 dark:border-white/10 hover:border-black/25 ${activeStyles.buttonBg}`
@@ -1389,7 +1334,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               <button
                 onClick={() => requestAiAnalysis('historical')}
                 disabled={isAiLoading}
-                className={`py-2.5 px-3 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer ${
+                className={`py-2 px-2.5 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer ${
                   explanationMode === 'historical' 
                     ? activeStyles.activePillBg
                     : `border-black/10 dark:border-white/10 hover:border-black/25 ${activeStyles.buttonBg}`
@@ -1414,7 +1359,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                   }
                 }}
                 disabled={isTtsLoading}
-                className={`py-2.5 px-3 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer relative ${
+                className={`py-2 px-2.5 text-left border rounded-none text-xs font-sans font-bold tracking-tight transition flex items-center justify-between cursor-pointer relative ${
                   isTtsLoading 
                     ? 'bg-amber-600 hover:bg-amber-700 text-white animate-pulse'
                     : isPlayingTts
