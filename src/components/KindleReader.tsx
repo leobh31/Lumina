@@ -1175,24 +1175,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               </div>
             </div>
           ) : (
-            explanationMode === null ? (
-              <div className="flex-grow flex flex-col justify-center items-center py-8 px-4 text-center space-y-3">
-                <div className="w-9 h-9 rounded-full bg-[#5A5A40]/10 flex items-center justify-center">
-                  <Sparkles className="w-4.5 h-4.5 text-[#5A5A40]" />
-                </div>
-                <div className="space-y-0.5">
-                  <h4 className="text-xs font-sans uppercase tracking-widest font-bold text-[#5A5A40] dark:text-[#D0CB9E]">
-                    Professor Lumina
-                  </h4>
-                  <p className="text-xs text-stone-500 dark:text-stone-400 font-serif italic max-w-[280px]">
-                    "A leitura ativa transforma a informação em sabedoria."
-                  </p>
-                </div>
-                <p className="text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 max-w-[240px] font-sans">
-                  Toque em uma das ações inteligentes abaixo para obter reflexões e contexto histórico via IA, ou converse livremente na aba ao lado.
-                </p>
-              </div>
-            ) : (
+            explanationMode === null ? null : (
               <div className="space-y-3 flex-grow flex flex-col justify-between">
                 <div>
                   {/* Category Subtitle of Active Assistance */}

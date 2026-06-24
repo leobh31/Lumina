@@ -197,40 +197,6 @@ export default function BookDetailModal({ book, onClose, onSave, onDelete, onOpe
                 </div>
               </div>
 
-              {/* Row 2: Star Rating System */}
-              <div>
-                <label className="block text-[10px] sm:text-xs uppercase font-mono tracking-wider text-stone-500 font-semibold mb-1">
-                  Sua Avaliação Literária
-                </label>
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      type="button"
-                      onClick={() => setRating(star)}
-                      className="p-1 text-amber-400 font-bold hover:scale-110 transition duration-150"
-                    >
-                      <Star 
-                        className={`w-5 h-5 sm:w-6 sm:h-6 ${
-                          rating && rating >= star 
-                            ? 'fill-amber-400 text-amber-400' 
-                            : 'text-stone-300 stroke-2'
-                        }`} 
-                      />
-                    </button>
-                  ))}
-                  {rating && (
-                    <button
-                      type="button"
-                      onClick={() => setRating(undefined)}
-                      className="text-stone-400 hover:text-stone-600 font-mono text-[10px] sm:text-[11px] ml-2 underline"
-                    >
-                      limpar
-                    </button>
-                  )}
-                </div>
-              </div>
-
               {/* Row 3: Notes & Annotations Textarea */}
               <div>
                 <label className="block text-[10px] sm:text-xs uppercase font-mono tracking-wider text-stone-500 font-semibold mb-1">
@@ -240,7 +206,7 @@ export default function BookDetailModal({ book, onClose, onSave, onDelete, onOpe
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Qual o principal ensinamento desse trecho? Escreva insights, citações ou reflexões..."
-                  className="w-full bg-stone-50 border border-stone-200 text-stone-800 placeholder-stone-400 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-amber-900 focus:border-amber-900 transition leading-relaxed font-sans h-20 sm:h-28 resize-none"
+                  className="w-full bg-stone-50 border border-stone-200 text-stone-800 placeholder-stone-400 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-1 focus:ring-amber-900 focus:border-amber-900 transition leading-relaxed font-sans h-32 sm:h-44 resize-none"
                 />
               </div>
             </div>
