@@ -379,8 +379,22 @@ export default function App() {
                   const isActive = currentBookTab === tab;
                   const label = 
                     tab === 'reading' ? 'Lendo Agora' : 
-                    tab === 'want-to-read' ? 'Lista de Desejos' : 'Concluídos';
-                  const count = books.filter(b => b.status === tab).length;
+                    tab === 'want-to-read' ? 'Lista de Desejos' : 'Lidos';
+                  
+                  // Filter the count dynamically by the currently active category and search filter
+                  const count = books.filter(b => {
+                    if (b.status !== tab) return false;
+                    if (selectedCategory !== 'todos') {
+                      if (b.category.toLowerCase() !== selectedCategory.toLowerCase()) return false;
+                    }
+                    if (searchTerm.trim() !== '') {
+                      const term = searchTerm.toLowerCase();
+                      const matchesTitle = b.title.toLowerCase().includes(term);
+                      const matchesAuthor = b.author.toLowerCase().includes(term);
+                      if (!matchesTitle && !matchesAuthor) return false;
+                    }
+                    return true;
+                  }).length;
 
                   return (
                     <button
