@@ -450,6 +450,7 @@ export default function App() {
             <div className="flex flex-col sm:flex-row gap-3 justify-center items-center py-2" id="extensions-menu">
               <button
                 type="button"
+                translate="no"
                 onClick={() => setShowTrilhas(!showTrilhas)}
                 className={`w-full sm:w-auto px-6 py-2.5 text-xs font-sans font-bold uppercase tracking-widest transition flex items-center justify-center gap-2 cursor-pointer border rounded-none ${
                   showTrilhas 
@@ -463,6 +464,7 @@ export default function App() {
 
               <button
                 type="button"
+                translate="no"
                 onClick={() => setShowNivel(!showNivel)}
                 className={`w-full sm:w-auto px-6 py-2.5 text-xs font-sans font-bold uppercase tracking-widest transition flex items-center justify-center gap-2 cursor-pointer border rounded-none ${
                   showNivel 
