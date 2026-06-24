@@ -433,7 +433,10 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || errData.details || 'Falha no processamento. Por favor, verifique sua conexão.');
+        const detailedMsg = errData.error && errData.details 
+          ? `${errData.error} (Detalhes: ${errData.details})`
+          : (errData.error || errData.details || 'Falha no processamento. Por favor, verifique sua conexão.');
+        throw new Error(detailedMsg);
       }
 
       const data = await response.json();
@@ -482,7 +485,10 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || errData.details || 'Falha no processamento. Por favor, verifique sua conexão.');
+        const detailedMsg = errData.error && errData.details 
+          ? `${errData.error} (Detalhes: ${errData.details})`
+          : (errData.error || errData.details || 'Falha no processamento. Por favor, verifique sua conexão.');
+        throw new Error(detailedMsg);
       }
 
       const data = await response.json();
