@@ -31,7 +31,7 @@ export default function BookCard({ book, onPageUpdate, onSelect, onOpenKindle }:
       exit={{ opacity: 0, scale: 0.98 }}
       transition={{ duration: 0.3 }}
       onClick={() => onSelect(book)}
-      className="p-4 bg-white/80 border border-black/10 rounded-sm hover:border-black/30 hover:bg-white transition-all duration-300 flex gap-4 cursor-pointer relative group overflow-hidden"
+      className="py-4 px-1 bg-transparent border-b border-black/10 hover:bg-black/[0.01] transition-all duration-300 flex gap-6 cursor-pointer relative group overflow-hidden"
       id={`book-card-${book.id}`}
     >
       {/* Visual Hardcover Book Representation */}
@@ -95,7 +95,7 @@ export default function BookCard({ book, onPageUpdate, onSelect, onOpenKindle }:
             )}
           </div>
 
-          <h3 className="text-base font-serif font-bold text-stone-900 tracking-tight leading-snug mt-2 group-hover:text-[#5A5A40] transition-colors truncate">
+          <h3 className="text-base font-serif font-bold text-stone-900 tracking-tight leading-snug mt-2 group-hover:text-[#5A5A40] transition-colors line-clamp-2">
             {book.title}
           </h3>
           <p className="text-xs text-stone-500 font-sans mt-0.5 truncate">{book.author}</p>

@@ -22,7 +22,8 @@ import {
   BookOpen, 
   LogOut, 
   Bookmark, 
-  GraduationCap 
+  GraduationCap,
+  Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -42,6 +43,8 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentBookTab, setCurrentBookTab] = useState<'reading' | 'want-to-read' | 'completed'>('reading');
+  const [showTrilhas, setShowTrilhas] = useState(false);
+  const [showNivel, setShowNivel] = useState(false);
 
   // --- Modal Controllers ---
   const [selectedBookForNotes, setSelectedBookForNotes] = useState<Book | null>(null);
@@ -207,7 +210,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F5F2ED] text-[#1A1A1A] font-serif p-3 sm:p-6 md:p-8 selection:bg-stone-200 selection:text-black pb-12" id="lumina-app">
       {/* Outer Editorial Container Frame */}
-      <div className="max-w-7xl mx-auto bg-[#F5F2ED] border-[10px] md:border-[16px] border-white shadow-xl min-h-[calc(100vh-4rem)] p-4 sm:p-8 md:p-10 flex flex-col justify-between rounded-sm relative">
+      <div className="max-w-7xl mx-auto bg-[#F5F2ED] min-h-[calc(100vh-4rem)] p-4 sm:p-8 md:p-10 flex flex-col justify-between rounded-sm relative">
         
         {/* Editorial Brand Header */}
         <header className="border-b border-black/10 pb-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-end gap-6" id="primary-header">
@@ -339,18 +342,16 @@ export default function App() {
               </div>
             </motion.div>
           )}
-
-          {/* Stats Counters component */}
-          <StatsBanner books={books} paths={paths} />
         </section>
 
         {/* Dashboard Panels Grid */}
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-8 flex-grow" id="main-grid">
           
-          {/* LEFT SIDE: BIBLIOTECA (7 out of 12 columns) */}
-          <div className="lg:col-span-7 space-y-6" id="shelf-column">
+          {/* LEFT SIDE: BIBLIOTECA (Takes 7 columns if panels are active, or full 12 if none are active) */}
+          <div className={`${showTrilhas || showNivel ? 'lg:col-span-7' : 'lg:col-span-12'} space-y-6 transition-all duration-300`} id="shelf-column">
             
-            <div className="bg-white/60 border border-black/10 rounded-sm p-6 relative">
+            {/* ESTANTE PARTICULAR */}
+            <div className="bg-white/60 border border-black/10 rounded-sm p-6 relative" id="shelf-card">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-black/5 pb-4">
                 <div>
                   <h2 className="text-lg font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
@@ -373,7 +374,7 @@ export default function App() {
               </div>
 
               {/* Shelf Sub-Tabs: Reading / Wants / Completed */}
-              <div className="flex gap-4 border-b border-black/5 pb-3 mb-6 font-sans text-xs">
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-6 gap-y-2 border-b border-black/5 pb-3 mb-6 font-sans text-xs">
                 {(['reading', 'want-to-read', 'completed'] as const).map((tab) => {
                   const isActive = currentBookTab === tab;
                   const label = 
@@ -385,7 +386,7 @@ export default function App() {
                     <button
                       key={tab}
                       onClick={() => setCurrentBookTab(tab)}
-                      className={`pb-1 uppercase tracking-wider font-bold transition flex items-center gap-1.5 cursor-pointer border-b-2 ${
+                      className={`pb-1 uppercase tracking-wider font-bold transition flex items-center gap-1.5 cursor-pointer border-b-2 whitespace-nowrap ${
                         isActive
                           ? 'text-[#5A5A40] border-[#5A5A40]'
                           : 'text-stone-400 border-transparent hover:text-stone-700'
@@ -401,7 +402,7 @@ export default function App() {
               </div>
 
               {/* Books Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-6">
                 <AnimatePresence mode="popLayout">
                   {filteredBooks.length > 0 ? (
                     filteredBooks.map((book) => (
@@ -430,62 +431,125 @@ export default function App() {
                 </AnimatePresence>
               </div>
             </div>
-          </div>
 
-          {/* RIGHT SIDE: TRILHAS DE APRENDIZADO (5 out of 12 columns) */}
-          <div className="lg:col-span-5 space-y-6" id="paths-column">
-            <div className="bg-white/60 border border-black/10 rounded-sm p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-black/5 pb-4">
-                <div>
-                  <h2 className="text-lg font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
-                    <GraduationCap className="w-4 h-4 text-[#5A5A40]" />
-                    Trilhas de Estudo
-                  </h2>
-                  <p className="text-xs text-stone-500 mt-0.5 font-sans">
-                    Roteiros cronológicos estruturados passo-a-passo.
-                  </p>
-                </div>
+            {/* Menu de Recursos Simplificado */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center py-2" id="extensions-menu">
+              <button
+                type="button"
+                onClick={() => setShowTrilhas(!showTrilhas)}
+                className={`w-full sm:w-auto px-6 py-2.5 text-xs font-sans font-bold uppercase tracking-widest transition flex items-center justify-center gap-2 cursor-pointer border rounded-none ${
+                  showTrilhas 
+                    ? 'bg-[#5A5A40] text-white border-[#5A5A40]' 
+                    : 'bg-white/60 border-black/10 text-stone-700 hover:bg-white hover:border-black/25'
+                }`}
+              >
+                <GraduationCap className="w-3.5 h-3.5" />
+                Trilha de Estudos
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setIsAddPathOpen(true)}
-                  className="px-3.5 py-2 border border-black/10 hover:border-black/25 bg-white hover:bg-stone-50 text-stone-750 text-xs font-sans font-bold uppercase tracking-widest rounded-none transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
-                  id="trigger-add-path"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Trilha
-                </button>
-              </div>
-
-              {/* Trails List */}
-              <div className="space-y-4" id="paths-list-wrapper">
-                <AnimatePresence mode="popLayout">
-                  {filteredPaths.length > 0 ? (
-                    filteredPaths.map((path) => (
-                      <PathCard
-                        key={path.id}
-                        path={path}
-                        books={books}
-                        onToggleStep={handleTogglePathwayStep}
-                      />
-                    ))
-                  ) : (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="py-16 text-center space-y-2 border border-dashed border-stone-300 rounded-none bg-stone-50/25"
-                      id="empty-paths-prompt"
-                    >
-                      <Compass className="w-6 h-6 text-stone-400 mx-auto" />
-                      <p className="text-xs font-sans uppercase tracking-widest font-bold text-stone-600">Nenhum roteiro registrado</p>
-                      <p className="text-xs text-stone-400 max-w-xs mx-auto px-4 font-serif leading-relaxed italic">
-                        Crie um roteiro personalizado com leituras encadeadas para consolidar sua formação.
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowNivel(!showNivel)}
+                className={`w-full sm:w-auto px-6 py-2.5 text-xs font-sans font-bold uppercase tracking-widest transition flex items-center justify-center gap-2 cursor-pointer border rounded-none ${
+                  showNivel 
+                    ? 'bg-[#5A5A40] text-white border-[#5A5A40]' 
+                    : 'bg-white/60 border-black/10 text-stone-700 hover:bg-white hover:border-black/25'
+                }`}
+              >
+                <Award className="w-3.5 h-3.5" />
+                Nível de Estudo
+              </button>
             </div>
+
           </div>
+
+          {/* RIGHT SIDE: PANEL EXTENSIONS (Takes 5 columns, rendered when either panel is active) */}
+          {(showTrilhas || showNivel) && (
+            <div className="lg:col-span-5 space-y-6" id="extensions-column">
+              
+              {/* TRILHAS DE ESTUDO PANEL */}
+              <AnimatePresence>
+                {showTrilhas && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, y: -10 }}
+                    animate={{ opacity: 1, height: 'auto', y: 0 }}
+                    exit={{ opacity: 0, height: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="bg-white/60 border border-black/10 rounded-sm p-6" id="paths-card">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-black/5 pb-4">
+                        <div>
+                          <h2 className="text-lg font-serif font-bold text-[#1A1A1A] flex items-center gap-2">
+                            <GraduationCap className="w-4 h-4 text-[#5A5A40]" />
+                            Trilhas de Estudo
+                          </h2>
+                          <p className="text-xs text-stone-500 mt-0.5 font-sans">
+                            Roteiros cronológicos estruturados passo-a-passo.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsAddPathOpen(true)}
+                          className="px-3.5 py-2 border border-black/10 hover:border-black/25 bg-white hover:bg-stone-50 text-stone-750 text-xs font-sans font-bold uppercase tracking-widest rounded-none transition flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                          id="trigger-add-path"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Trilha
+                        </button>
+                      </div>
+
+                      {/* Trails List */}
+                      <div className="space-y-4" id="paths-list-wrapper">
+                        <AnimatePresence mode="popLayout">
+                          {filteredPaths.length > 0 ? (
+                            filteredPaths.map((path) => (
+                              <PathCard
+                                key={path.id}
+                                path={path}
+                                books={books}
+                                onToggleStep={handleTogglePathwayStep}
+                              />
+                            ))
+                          ) : (
+                            <motion.div 
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="py-16 text-center space-y-2 border border-dashed border-stone-300 rounded-none bg-stone-50/25"
+                              id="empty-paths-prompt"
+                            >
+                              <Compass className="w-6 h-6 text-stone-400 mx-auto" />
+                              <p className="text-xs font-sans uppercase tracking-widest font-bold text-stone-600">Nenhum roteiro registrado</p>
+                              <p className="text-xs text-stone-400 max-w-xs mx-auto px-4 font-serif leading-relaxed italic">
+                                Crie um roteiro personalizado com leituras encadeadas para consolidar sua formação.
+                              </p>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* NÍVEL DE ESTUDO PANEL */}
+              <AnimatePresence>
+                {showNivel && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, y: -10 }}
+                    animate={{ opacity: 1, height: 'auto', y: 0 }}
+                    exit={{ opacity: 0, height: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="overflow-hidden"
+                  >
+                    <StatsBanner books={books} paths={paths} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+            </div>
+          )}
+
         </section>
 
         {/* Humble and Polished Editorial Footer */}
