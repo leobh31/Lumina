@@ -22,6 +22,15 @@ const ai = new GoogleGenAI({
   }
 });
 
+// Health check endpoint to diagnose Vercel deployment and environment variables
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    hasApiKey: !!process.env.GEMINI_API_KEY,
+    nodeEnv: process.env.NODE_ENV || "unknown"
+  });
+});
+
 // API endpoint for book assistance
 app.post("/api/gemini/explain", async (req, res) => {
   try {

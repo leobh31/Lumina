@@ -270,8 +270,22 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         });
 
         if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Erro HTTP ${response.status}`);
+          let errorMsg = `Erro ${response.status}: ${response.statusText || 'Falha na resposta do servidor'}`;
+          try {
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const errData = await response.json();
+              errorMsg = errData.error || errorMsg;
+            } else {
+              const text = await response.text();
+              if (text && text.trim().length > 0 && text.length < 200) {
+                errorMsg += ` - ${text.trim()}`;
+              }
+            }
+          } catch (e) {
+            // ignore
+          }
+          throw new Error(errorMsg);
         }
 
         const blob = await response.blob();
@@ -432,11 +446,31 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        const detailedMsg = errData.error && errData.details 
-          ? `${errData.error} (Detalhes: ${errData.details})`
-          : (errData.error || errData.details || 'Falha no processamento. Por favor, verifique sua conexão.');
-        throw new Error(detailedMsg);
+        let errorMsg = `Erro ${response.status}: ${response.statusText || 'Falha na resposta do servidor'}`;
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errData = await response.json();
+            errorMsg = errData.error && errData.details 
+              ? `${errData.error} (Detalhes: ${errData.details})`
+              : (errData.error || errData.details || errorMsg);
+          } else {
+            const text = await response.text();
+            if (text && text.trim().length > 0) {
+              if (text.length < 200) {
+                errorMsg += ` - ${text.trim()}`;
+              } else if (text.includes('<title>')) {
+                const match = text.match(/<title>([\s\S]*?)<\/title>/i);
+                if (match && match[1]) {
+                  errorMsg += ` - ${match[1].trim()}`;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // ignore parsing error
+        }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
@@ -484,11 +518,31 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
       });
 
       if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        const detailedMsg = errData.error && errData.details 
-          ? `${errData.error} (Detalhes: ${errData.details})`
-          : (errData.error || errData.details || 'Falha no processamento. Por favor, verifique sua conexão.');
-        throw new Error(detailedMsg);
+        let errorMsg = `Erro ${response.status}: ${response.statusText || 'Falha na resposta do servidor'}`;
+        try {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errData = await response.json();
+            errorMsg = errData.error && errData.details 
+              ? `${errData.error} (Detalhes: ${errData.details})`
+              : (errData.error || errData.details || errorMsg);
+          } else {
+            const text = await response.text();
+            if (text && text.trim().length > 0) {
+              if (text.length < 200) {
+                errorMsg += ` - ${text.trim()}`;
+              } else if (text.includes('<title>')) {
+                const match = text.match(/<title>([\s\S]*?)<\/title>/i);
+                if (match && match[1]) {
+                  errorMsg += ` - ${match[1].trim()}`;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // ignore parsing error
+        }
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
