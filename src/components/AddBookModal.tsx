@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Book } from '../types';
-import { X, Check, Upload, FileText, CheckCircle2, Trash2 } from 'lucide-react';
+import { X, Check, Upload, FileText, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface AddBookModalProps {
@@ -17,6 +17,37 @@ const COVERS = [
   { name: 'Sertão Quente', value: 'linear-gradient(135deg, #78350f, #2d1500)' }, // warm orange/brown
   { name: 'Ébano Nobre', value: 'linear-gradient(135deg, #1c1917, #0c0a09)' } // luxury black
 ];
+
+function isTextGarbled(text: string): boolean {
+  if (!text || text.length < 10) return false;
+  
+  let weirdChars = 0;
+  let standardLetters = 0;
+  
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if ((code >= 0xE000 && code <= 0xF8FF) || code === 0xFFFD || code === 0) {
+      weirdChars++;
+    } else if (/[a-zA-ZáéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ]/.test(text[i])) {
+      standardLetters++;
+    }
+  }
+
+  if (weirdChars > 0 && (weirdChars / text.length) > 0.1) {
+    return true;
+  }
+
+  if (text.length > 80 && (standardLetters / text.length) < 0.3) {
+    return true;
+  }
+
+  const symbolCount = (text.match(/[!#$%\&'()*+,\-\.\/0-9]/g) || []).length;
+  if (text.length > 50 && (symbolCount / text.length) > 0.5) {
+    return true;
+  }
+
+  return false;
+}
 
 const parseTxtToPassages = (rawText: string): { pageNumber: number; chapterTitle: string; text: string }[] => {
   const text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -116,6 +147,7 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
   const [uploadError, setUploadError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState('');
+  const [hasEncodingIssue, setHasEncodingIssue] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -152,6 +184,7 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
 
           setUploadedPassages(passages);
           setUploadedFileName(file.name);
+          setHasEncodingIssue(false);
           
           if (!title) {
             const cleanName = file.name
@@ -253,6 +286,17 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
         setUploadedPassages(processedPassages);
         setUploadedFileName(file.name);
         
+        // Detect encoding / scanner issue
+        let encodingWarning = false;
+        const testPages = processedPassages.slice(0, Math.min(3, processedPassages.length));
+        for (const testP of testPages) {
+          if (isTextGarbled(testP.text)) {
+            encodingWarning = true;
+            break;
+          }
+        }
+        setHasEncodingIssue(encodingWarning);
+        
         if (!title) {
           const cleanName = file.name
             .replace(/\.pdf$/i, '')
@@ -298,6 +342,7 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
     setUploadedPassages(undefined);
     setUploadedFileName('');
     setUploadError('');
+    setHasEncodingIssue(false);
   };
 
   if (!isOpen) return null;
@@ -431,6 +476,20 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
+                </div>
+              )}
+
+              {hasEncodingIssue && (
+                <div className="mt-2.5 p-3 bg-amber-500/5 border border-amber-600/30 rounded-xl flex gap-2 text-left">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1 font-sans">
+                    <p className="text-[11px] font-bold text-amber-800 dark:text-amber-400 leading-tight">
+                      Aviso de Codificação (PDF Protegido / Imagem)
+                    </p>
+                    <p className="text-[10px] text-stone-600 dark:text-stone-300 leading-relaxed">
+                      Este PDF parece usar fontes criptografadas ou páginas escaneadas como imagem. A extração de texto resultou em símbolos ou quadrados. Você poderá ler normalmente e <strong>corrigir as páginas manualmente</strong> dentro do leitor, ou substituir o livro por uma versão em arquivo <strong>.TXT limpo</strong> a qualquer momento!
+                    </p>
+                  </div>
                 </div>
               )}
 

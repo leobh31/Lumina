@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Book } from '../types';
 import { getBookPassages, PassagePage } from '../data/bookPassages';
-import { getPassagesFromIndexedDB } from '../utils/indexedDb';
+import { getPassagesFromIndexedDB, savePassagesToIndexedDB } from '../utils/indexedDb';
 import { 
   X, 
   ChevronLeft, 
@@ -17,7 +17,11 @@ import {
   Pause, 
   Square,
   Loader2,
-  ArrowLeft
+  ArrowLeft,
+  Edit3,
+  AlertTriangle,
+  FileText,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -31,6 +35,41 @@ type KindleTheme = 'light' | 'sepia' | 'charcoal' | 'mint';
 type KindleFont = 'serif' | 'sans' | 'mono' | 'dyslexic';
 type KindleMargin = 'narrow' | 'medium' | 'wide';
 
+function isTextGarbled(text: string): boolean {
+  if (!text || text.length < 10) return false;
+  
+  let weirdChars = 0;
+  let standardLetters = 0;
+  
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    // Private use area, replacement character, or null characters
+    if ((code >= 0xE000 && code <= 0xF8FF) || code === 0xFFFD || code === 0) {
+      weirdChars++;
+    } else if (/[a-zA-ZáéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ]/.test(text[i])) {
+      standardLetters++;
+    }
+  }
+
+  // If a high percentage of characters are in the Private Use Area or are replacement characters
+  if (weirdChars > 0 && (weirdChars / text.length) > 0.1) {
+    return true;
+  }
+
+  // If standard letters are too sparse in a reasonably long text
+  if (text.length > 80 && (standardLetters / text.length) < 0.3) {
+    return true;
+  }
+
+  // Check for raw strings with mostly symbols like !"! ! ##$ %& ! '() !!
+  const symbolCount = (text.match(/[!#$%\&'()*+,\-\.\/0-9]/g) || []).length;
+  if (text.length > 50 && (symbolCount / text.length) > 0.5) {
+    return true;
+  }
+
+  return false;
+}
+
 export default function KindleReader({ book, onClose, onPageUpdate }: KindleReaderProps) {
   // --- Kindle Configuration ---
   const [theme, setTheme] = useState<KindleTheme>('sepia');
@@ -38,6 +77,12 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const [fontFamily, setFontFamily] = useState<KindleFont>('serif');
   const [marginSize, setMarginSize] = useState<KindleMargin>('medium');
   const [showSettings, setShowSettings] = useState<boolean>(false);
+
+  // --- Page Editing & Replacement states ---
+  const [isEditingPageText, setIsEditingPageText] = useState<boolean>(false);
+  const [editedPageText, setEditedPageText] = useState<string>('');
+  const [isTxtReplacing, setIsTxtReplacing] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Reading Progression ---
   const [passages, setPassages] = useState<PassagePage[]>([]);
@@ -144,6 +189,93 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
     }
   };
 
+  const handleSavePageText = async () => {
+    if (!passages || passages.length === 0) return;
+    
+    const updatedPassages = [...passages];
+    const targetIdx = relativePageIndex >= 0 && relativePageIndex < passages.length ? relativePageIndex : 0;
+    
+    updatedPassages[targetIdx] = {
+      ...updatedPassages[targetIdx],
+      text: editedPageText
+    };
+    
+    setPassages(updatedPassages);
+    setIsEditingPageText(false);
+    
+    // Save to IndexedDB
+    try {
+      await savePassagesToIndexedDB(book.id, updatedPassages);
+      triggerToast("Texto da página atualizado com sucesso!");
+    } catch (err) {
+      console.error("Erro ao salvar trechos editados no IndexedDB:", err);
+      triggerToast("Erro ao salvar alterações no armazenamento permanente.");
+    }
+  };
+
+  const handleTxtFileReplacement = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsTxtReplacing(true);
+    triggerToast("Processando arquivo de texto...");
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const fullText = event.target?.result as string;
+        if (!fullText || !fullText.trim()) {
+          triggerToast("O arquivo TXT está vazio!");
+          setIsTxtReplacing(false);
+          return;
+        }
+
+        // Split text into pages
+        const words = fullText.split(/\s+/);
+        const wordsPerPage = 220; // Approximately 1500-1850 chars
+        const generatedPassages: PassagePage[] = [];
+        let currentPageText: string[] = [];
+        let pageNum = 1;
+
+        for (let i = 0; i < words.length; i++) {
+          currentPageText.push(words[i]);
+          if (currentPageText.length >= wordsPerPage || i === words.length - 1) {
+            generatedPassages.push({
+              pageNumber: pageNum,
+              chapterTitle: `Seção ${pageNum}`,
+              text: currentPageText.join(' ')
+            });
+            currentPageText = [];
+            pageNum++;
+          }
+        }
+
+        if (generatedPassages.length === 0) {
+          triggerToast("Não foi possível processar o arquivo.");
+          setIsTxtReplacing(false);
+          return;
+        }
+
+        // Save to state & IndexedDB
+        setPassages(generatedPassages);
+        setRelativePageIndex(0);
+        setIsEditingPageText(false);
+        await savePassagesToIndexedDB(book.id, generatedPassages);
+
+        triggerToast(`Sucesso! Substituído por ${generatedPassages.length} páginas limpas.`);
+      } catch (err) {
+        console.error("Error parsing replacement TXT file:", err);
+        triggerToast("Erro ao processar o arquivo TXT.");
+      } finally {
+        setIsTxtReplacing(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
   // --- Mobile responsivity toggle ---
   const [showCompanionOnMobile, setShowCompanionOnMobile] = useState<boolean>(false);
 
@@ -176,6 +308,13 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const currentPassage: PassagePage = (passages && passages.length > 0)
     ? (passages[relativePageIndex] || passages[0])
     : { pageNumber: 1, chapterTitle: 'Carregando...', text: 'Carregando o texto do livro...' };
+
+  // Prefill editedPageText when editing starts or page changes
+  useEffect(() => {
+    if (currentPassage) {
+      setEditedPageText(currentPassage.text);
+    }
+  }, [relativePageIndex, isEditingPageText, passages]);
 
   // Colors config map corresponding to themes
   const themeClasses = {
@@ -652,10 +791,24 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
             {book.title}
           </div>
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             <button 
               type="button" 
-              onClick={() => setShowSettings(!showSettings)}
+              onClick={() => {
+                setIsEditingPageText(!isEditingPageText);
+                setShowSettings(false);
+              }}
+              className={`p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition cursor-pointer ${isEditingPageText ? 'text-amber-600 dark:text-amber-400' : ''}`}
+              title="Corrigir/Editar Texto desta Página"
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+            <button 
+              type="button" 
+              onClick={() => {
+                setShowSettings(!showSettings);
+                setIsEditingPageText(false);
+              }}
               className="p-1 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition cursor-pointer"
               title="Ajustar Tipografia e Temas"
             >
@@ -826,6 +979,43 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                     Usando o sintetizador nativo do seu dispositivo. Ideal para escutar no idioma nativo <span className="font-bold underline">Português (pt-BR)</span> com pronúncia perfeita do livro.
                   </p>
                 )}
+
+                {/* Seção de Substituição por TXT (Corrigir codificação) */}
+                <div id="txt-replacement-section" className="pt-3 border-t border-black/5 dark:border-white/5 space-y-2 font-sans text-xs">
+                  <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <FileText className="w-3.5 h-3.5" /> Corrigir Livro com Arquivo de Texto (.txt):
+                  </span>
+                  <p className="text-[10px] text-stone-500 dark:text-stone-400 leading-normal">
+                    Se o seu arquivo PDF tem erros de codificação ou scanner e não mostra o texto correto, você pode subir o livro em formato <strong>.txt</strong> limpo. Nós dividiremos o texto automaticamente em páginas perfeitas!
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleTxtFileReplacement}
+                      accept=".txt"
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={isTxtReplacing}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-[#5A5A40]/10 text-[#5A5A40] dark:bg-[#D0CB9E]/10 dark:text-[#D0CB9E] hover:bg-[#5A5A40]/20 text-[10.5px] uppercase tracking-wider font-bold rounded-xs transition cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                    >
+                      {isTxtReplacing ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Processando...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Selecionar Arquivo .TXT</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
@@ -844,18 +1034,90 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
           ) : (
             <div className={`max-w-3xl w-full ${getMarginClass(marginSize)} transition-all duration-300`} id="kindle-text-stage">
             
-            {/* Main book text with custom sizes */}
-            <p 
-              className={`${getFontFamilyClass(fontFamily)} leading-[1.7] tracking-normal break-words whitespace-pre-line text-justify`}
-              style={{ fontSize: `${fontSize}px` }} 
-              id="kindle-passage-paragraph"
-            >
-              {currentPassage.text}
-            </p>
+            {isEditingPageText ? (
+              <div className="space-y-4 border border-dashed border-stone-400 dark:border-stone-600 p-5 bg-stone-100/30 dark:bg-stone-900/30 rounded-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase font-sans tracking-widest font-bold text-stone-600 dark:text-stone-300">
+                    ✏️ Corrigir Texto da Página {currentPassage.pageNumber}
+                  </span>
+                  <span className="text-[10px] text-stone-400">Codificação UTF-8 manual</span>
+                </div>
+                
+                <p className="text-[11px] text-stone-500 leading-normal">
+                  Se o texto deste PDF foi extraído com erros de codificação ou símbolos vazios, você pode colar ou editar o texto limpo desta página abaixo. O Lumina atualizará este trecho permanentemente.
+                </p>
 
-            {/* Elegant, premium audiobook controller */}
-            <div className={`mt-8 p-3 rounded-none border ${activeStyles.border} ${activeStyles.panelBg} flex flex-col sm:flex-row items-center justify-between gap-3 font-sans`} id="main-audiobook-player">
-              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <textarea
+                  value={editedPageText}
+                  onChange={(e) => setEditedPageText(e.target.value)}
+                  className="w-full text-stone-800 dark:text-stone-100 bg-white dark:bg-stone-950 p-4 border border-black/15 dark:border-white/10 rounded-none focus:outline-none focus:border-[#5A5A40] h-64 font-serif leading-relaxed text-base"
+                  placeholder="Cole ou digite o texto limpo correspondente a esta página aqui..."
+                />
+
+                <div className="flex items-center gap-2 justify-end">
+                  <button
+                    onClick={() => {
+                      setIsEditingPageText(false);
+                      setEditedPageText(currentPassage.text);
+                    }}
+                    className="px-4 py-2 text-stone-500 dark:text-stone-400 text-xs font-bold uppercase tracking-wider hover:bg-black/5 dark:hover:bg-white/5 transition border border-transparent cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleSavePageText}
+                    className="px-4 py-2 bg-[#5A5A40] text-white text-xs font-bold uppercase tracking-wider hover:bg-[#4A4A33] transition cursor-pointer flex items-center gap-1.5 shadow-sm font-sans"
+                  >
+                    <Check className="w-3.5 h-3.5" /> Salvar Alterações
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Garbled text warning banner */}
+                {isTextGarbled(currentPassage.text) && (
+                  <div className="mb-6 p-4 border border-amber-600/30 bg-amber-500/5 rounded-sm text-xs font-sans space-y-2 text-stone-700 dark:text-stone-300 animate-fade-in">
+                    <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold">
+                      <AlertTriangle className="w-4 h-4" />
+                      <span>Detetamos um problema de codificação ou digitalização (scanner) nesta página</span>
+                    </div>
+                    <p className="leading-relaxed text-[11px]">
+                      Este livro PDF parece usar fontes personalizadas criptografadas ou páginas escaneadas como imagem. Por isso, a extração de texto resultou em símbolos incompreensíveis ou quadrados vazios.
+                    </p>
+                    <div className="flex flex-wrap gap-2.5 pt-1">
+                      <button
+                        onClick={() => setIsEditingPageText(true)}
+                        className="px-3 py-1 bg-[#5A5A40] text-white hover:bg-[#4A4A33] font-bold uppercase tracking-wider text-[10px] rounded-xs cursor-pointer flex items-center gap-1"
+                      >
+                        <Edit3 className="w-3 h-3" /> Corrigir esta Página
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowSettings(true);
+                          setTimeout(() => {
+                            document.getElementById('txt-replacement-section')?.scrollIntoView({ behavior: 'smooth' });
+                          }, 100);
+                        }}
+                        className="px-3 py-1 border border-[#5A5A40] text-[#5A5A40] dark:text-[#D0CB9E] dark:border-[#D0CB9E] hover:bg-black/5 dark:hover:bg-white/5 font-bold uppercase tracking-wider text-[10px] rounded-xs cursor-pointer flex items-center gap-1"
+                      >
+                        <FileText className="w-3 h-3" /> Substituir por .TXT Limpo
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Main book text with custom sizes */}
+                <p 
+                  className={`${getFontFamilyClass(fontFamily)} leading-[1.7] tracking-normal break-words whitespace-pre-line text-justify`}
+                  style={{ fontSize: `${fontSize}px` }} 
+                  id="kindle-passage-paragraph"
+                >
+                  {currentPassage.text}
+                </p>
+
+                {/* Elegant, premium audiobook controller */}
+                <div className={`mt-8 p-3 rounded-none border ${activeStyles.border} ${activeStyles.panelBg} flex flex-col sm:flex-row items-center justify-between gap-3 font-sans`} id="main-audiobook-player">
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
                 <div className={`p-2 rounded-sm border ${activeStyles.border} ${theme === 'charcoal' ? 'bg-stone-800' : 'bg-stone-100'} text-[#5A5A40]`}>
                   <AudioLines className={`w-4 h-4 ${isPlayingTts && !isPausedTts ? 'animate-pulse text-emerald-600 dark:text-emerald-400' : ''}`} />
                 </div>
@@ -942,9 +1204,11 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                 </div>
               </div>
             </div>
-          </div>
+            </>
           )}
-        </div>
+          </div>
+        )}
+      </div>
 
         {/* Page turn controls and bottom tracking (Desktop/Tablet) */}
         <footer className={`hidden md:flex px-6 py-4 border-t ${activeStyles.border} items-center justify-between font-sans text-xs`} id="kindle-footer">
