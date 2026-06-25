@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Book, LearningPath, Category } from './types';
 import { INITIAL_CATEGORIES, INITIAL_BOOKS, INITIAL_PATHS } from './initialData';
+import { savePassagesToIndexedDB, deletePassagesFromIndexedDB } from './utils/indexedDb';
 
 // Subcomponents
 import StatsBanner from './components/StatsBanner';
@@ -81,7 +82,12 @@ export default function App() {
   // Helper helper to save states
   const saveBooksState = (newBooks: Book[]) => {
     setBooks(newBooks);
-    localStorage.setItem('lumina_books', JSON.stringify(newBooks));
+    try {
+      localStorage.setItem('lumina_books', JSON.stringify(newBooks));
+    } catch (err) {
+      console.error("Erro ao salvar livros no LocalStorage:", err);
+      alert("Aviso: O armazenamento local do navegador está cheio. Suas preferências de leitura podem não persistir corretamente após recarregar a página.");
+    }
   };
 
   const savePathsState = (newPaths: LearningPath[]) => {
@@ -116,6 +122,7 @@ export default function App() {
     const filtered = books.filter(b => b.id !== bookId);
     saveBooksState(filtered);
     setSelectedBookForNotes(null);
+    deletePassagesFromIndexedDB(bookId).catch(console.error);
   };
 
   const handleTogglePathwayStep = (pathId: string, stepId: string) => {
@@ -134,10 +141,23 @@ export default function App() {
     savePathsState(updated);
   };
 
-  const handleCreateBook = (newBookData: Omit<Book, 'id'>) => {
+  const handleCreateBook = async (newBookData: Omit<Book, 'id'>) => {
+    const bookId = `book_${Date.now()}`;
+    
+    // If we have custom uploaded passages, save them separately to IndexedDB
+    if (newBookData.uploadedPassages && newBookData.uploadedPassages.length > 0) {
+      try {
+        await savePassagesToIndexedDB(bookId, newBookData.uploadedPassages);
+      } catch (err) {
+        console.error("Erro ao salvar trechos no IndexedDB:", err);
+      }
+    }
+
+    const { uploadedPassages, ...cleanBookData } = newBookData;
+
     const newBook: Book = {
-      ...newBookData,
-      id: `book_${Date.now()}`,
+      ...cleanBookData,
+      id: bookId,
       startDate: newBookData.status === 'reading' ? new Date().toISOString().split('T')[0] : undefined
     };
     saveBooksState([newBook, ...books]);

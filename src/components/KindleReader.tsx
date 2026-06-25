@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Book } from '../types';
 import { getBookPassages, PassagePage } from '../data/bookPassages';
+import { getPassagesFromIndexedDB } from '../utils/indexedDb';
 import { 
   X, 
   ChevronLeft, 
@@ -39,8 +40,44 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const [showSettings, setShowSettings] = useState<boolean>(false);
 
   // --- Reading Progression ---
-  const passages = getBookPassages(book);
+  const [passages, setPassages] = useState<PassagePage[]>([]);
+  const [isLoadingPassages, setIsLoadingPassages] = useState<boolean>(true);
   const [relativePageIndex, setRelativePageIndex] = useState<number>(0);
+
+  // Load passages from IndexedDB (or fallback static data) on mount
+  useEffect(() => {
+    const loadBookPassages = async () => {
+      setIsLoadingPassages(true);
+      try {
+        if (book.id.startsWith('book_')) {
+          const dbPassages = await getPassagesFromIndexedDB(book.id);
+          if (dbPassages && dbPassages.length > 0) {
+            setPassages(dbPassages);
+            setIsLoadingPassages(false);
+            return;
+          }
+        }
+        // Fallback to static passages
+        const staticPassages = getBookPassages(book);
+        setPassages(staticPassages);
+      } catch (err) {
+        console.error("Erro ao carregar passagens do livro:", err);
+        setPassages(getBookPassages(book));
+      } finally {
+        setIsLoadingPassages(false);
+      }
+    };
+    loadBookPassages();
+  }, [book.id]);
+
+  // Synchronize relativePageIndex with book.currentPage on initial load
+  useEffect(() => {
+    if (passages && passages.length > 0 && book.currentPage > 1) {
+      const multiplier = Math.max(1, Math.floor(book.totalPages / passages.length));
+      const targetIndex = Math.max(0, Math.min(passages.length - 1, Math.floor((book.currentPage - 1) / multiplier)));
+      setRelativePageIndex(targetIndex);
+    }
+  }, [passages, book.id]);
 
   // --- Touch Swipe Gestures for Mobile ---
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -136,7 +173,9 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
     }
   }, [playbackSpeed]);
 
-  const currentPassage: PassagePage = passages[relativePageIndex] || passages[0];
+  const currentPassage: PassagePage = (passages && passages.length > 0)
+    ? (passages[relativePageIndex] || passages[0])
+    : { pageNumber: 1, chapterTitle: 'Carregando...', text: 'Carregando o texto do livro...' };
 
   // Colors config map corresponding to themes
   const themeClasses = {
@@ -210,14 +249,14 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   // Sync relative page turns to the global book progression
   // It updates the general reading stats on the client
   useEffect(() => {
-    if (relativePageIndex >= 0) {
+    if (relativePageIndex >= 0 && passages && passages.length > 0) {
       // Calculate realistic page number to save
       // For instance: index=0 sets book's currentPage, index=1 adds extra.
       const multiplier = Math.max(1, Math.floor(book.totalPages / passages.length));
       const projectedPage = Math.min(book.totalPages, (relativePageIndex + 1) * multiplier);
       onPageUpdate(book.id, projectedPage);
     }
-  }, [relativePageIndex]);
+  }, [relativePageIndex, passages]);
 
   // Reset or seed conversation when passage index or custom text selection changes
   useEffect(() => {
@@ -794,7 +833,16 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
         {/* Kindle Inner Paper Content Body */}
         <div className="flex-grow flex flex-col justify-start items-center overflow-y-auto pt-1 md:pt-2 pb-10">
-          <div className={`max-w-3xl w-full ${getMarginClass(marginSize)} transition-all duration-300`} id="kindle-text-stage">
+          {isLoadingPassages ? (
+            <div className="flex flex-col items-center justify-center py-24 px-8 text-center space-y-4 max-w-md mx-auto">
+              <Loader2 className="w-8 h-8 text-[#5A5A40] animate-spin" />
+              <p className="text-xs font-sans uppercase tracking-widest font-bold text-stone-600 dark:text-stone-300">Carregando páginas do livro...</p>
+              <p className="text-xs text-stone-400 max-w-xs mx-auto italic">
+                Preparando os trechos e carregando as anotações inteligentes do Lumina.
+              </p>
+            </div>
+          ) : (
+            <div className={`max-w-3xl w-full ${getMarginClass(marginSize)} transition-all duration-300`} id="kindle-text-stage">
             
             {/* Main book text with custom sizes */}
             <p 
@@ -894,8 +942,8 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                 </div>
               </div>
             </div>
-
           </div>
+          )}
         </div>
 
         {/* Page turn controls and bottom tracking (Desktop/Tablet) */}
@@ -1025,25 +1073,73 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
             {/* Quick direct page switcher within companion */}
             <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5 text-[11px] font-sans">
               <span className="opacity-75 font-semibold">Mudar de Página:</span>
-              <div className="flex items-center gap-1">
-                {passages.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setRelativePageIndex(idx);
-                      setCustomSelectedText('');
-                      triggerToast(`Você mudou para a página ${idx + 1}`);
-                    }}
-                    title={`Ir para a página ${idx + 1}`}
-                    className={`px-2 py-1 text-[10px] min-w-[24px] text-center font-bold rounded-sm border transition cursor-pointer ${
-                      relativePageIndex === idx
-                        ? 'bg-[#5A5A40] text-white border-transparent'
-                        : 'border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/20 text-stone-700 dark:text-stone-300 bg-white/20 dark:bg-stone-900/40'
-                    }`}
-                  >
-                    {idx + 1}
-                  </button>
-                ))}
+              <div className="flex items-center gap-1 flex-wrap justify-end max-w-xs">
+                {passages.length <= 8 ? (
+                  passages.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setRelativePageIndex(idx);
+                        setCustomSelectedText('');
+                        triggerToast(`Você mudou para a página ${idx + 1}`);
+                      }}
+                      title={`Ir para a página ${idx + 1}`}
+                      className={`px-2 py-1 text-[10px] min-w-[24px] text-center font-bold rounded-sm border transition cursor-pointer ${
+                        relativePageIndex === idx
+                          ? 'bg-[#5A5A40] text-white border-transparent'
+                          : 'border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/20 text-stone-700 dark:text-stone-300 bg-white/20 dark:bg-stone-900/40'
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  ))
+                ) : (
+                  <>
+                    {/* First Page */}
+                    {relativePageIndex > 1 && (
+                      <button
+                        onClick={() => { setRelativePageIndex(0); setCustomSelectedText(''); }}
+                        className="px-2 py-1 text-[10px] font-bold rounded-sm border border-black/10 text-stone-700 dark:text-stone-300 cursor-pointer"
+                      >
+                        1
+                      </button>
+                    )}
+                    {relativePageIndex > 2 && <span className="text-stone-400">...</span>}
+
+                    {/* Surrounding Pages */}
+                    {Array.from({ length: passages.length })
+                      .map((_, idx) => idx)
+                      .filter(idx => Math.abs(idx - relativePageIndex) <= 1)
+                      .map((idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setRelativePageIndex(idx);
+                            setCustomSelectedText('');
+                            triggerToast(`Você mudou para a página ${idx + 1}`);
+                          }}
+                          className={`px-2 py-1 text-[10px] min-w-[24px] text-center font-bold rounded-sm border transition cursor-pointer ${
+                            relativePageIndex === idx
+                              ? 'bg-[#5A5A40] text-white border-transparent'
+                              : 'border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/20 text-stone-700 dark:text-stone-300 bg-white/20 dark:bg-stone-900/40'
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+
+                    {relativePageIndex < passages.length - 3 && <span className="text-stone-400">...</span>}
+                    {/* Last Page */}
+                    {relativePageIndex < passages.length - 2 && (
+                      <button
+                        onClick={() => { setRelativePageIndex(passages.length - 1); setCustomSelectedText(''); }}
+                        className="px-2 py-1 text-[10px] font-bold rounded-sm border border-black/10 text-stone-700 dark:text-stone-300 cursor-pointer"
+                      >
+                        {passages.length}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
