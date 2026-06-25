@@ -82,6 +82,25 @@ const parseTxtToPassages = (rawText: string): { pageNumber: number; chapterTitle
   return passages;
 };
 
+// Lazy load pdf.js from CDN to extract text page-by-page directly in client
+const loadPdfJs = (): Promise<any> => {
+  return new Promise((resolve, reject) => {
+    if ((window as any).pdfjsLib) {
+      resolve((window as any).pdfjsLib);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+    script.onload = () => {
+      const pdfjsLib = (window as any).pdfjsLib;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+      resolve(pdfjsLib);
+    };
+    script.onerror = (err) => reject(err);
+    document.head.appendChild(script);
+  });
+};
+
 export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
@@ -95,6 +114,8 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,43 +124,154 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
     }
   };
 
-  const processFile = (file: File) => {
-    if (file.type !== 'text/plain' && !file.name.endsWith('.txt')) {
-      setUploadError('Por favor, envie um arquivo de texto (.txt).');
-      return;
-    }
-
+  const processFile = async (file: File) => {
     setUploadError('');
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      if (!text) {
-        setUploadError('O arquivo de texto está vazio.');
-        return;
-      }
+    setIsProcessing(true);
+    setProcessingProgress('Lendo arquivo...');
 
-      const passages = parseTxtToPassages(text);
-      if (passages.length === 0) {
-        setUploadError('Não foi possível extrair páginas do arquivo de texto.');
-        return;
-      }
+    const isTxt = file.name.endsWith('.txt') || file.type === 'text/plain';
+    const isPdf = file.name.endsWith('.pdf') || file.type === 'application/pdf';
 
-      setUploadedPassages(passages);
-      setUploadedFileName(file.name);
-      
-      // Auto-populate Title if not already set by the user
-      if (!title) {
-        const cleanName = file.name
-          .replace(/\.txt$/i, '')
-          .replace(/[-_]/g, ' ')
-          .replace(/\b\w/g, c => c.toUpperCase());
-        setTitle(cleanName);
+    if (isTxt) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const text = event.target?.result as string;
+          if (!text) {
+            setUploadError('O arquivo de texto está vazio.');
+            setIsProcessing(false);
+            return;
+          }
+
+          const passages = parseTxtToPassages(text);
+          if (passages.length === 0) {
+            setUploadError('Não foi possível extrair páginas do arquivo de texto.');
+            setIsProcessing(false);
+            return;
+          }
+
+          setUploadedPassages(passages);
+          setUploadedFileName(file.name);
+          
+          if (!title) {
+            const cleanName = file.name
+              .replace(/\.txt$/i, '')
+              .replace(/[-_]/g, ' ')
+              .replace(/\b\w/g, c => c.toUpperCase());
+            setTitle(cleanName);
+          }
+          
+          setTotalPages(passages.length);
+        } catch (err: any) {
+          setUploadError(`Erro ao ler arquivo TXT: ${err.message || err}`);
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+      reader.onerror = () => {
+        setUploadError('Erro ao abrir o arquivo de texto.');
+        setIsProcessing(false);
+      };
+      reader.readAsText(file);
+    } else if (isPdf) {
+      try {
+        setProcessingProgress('Carregando leitor de PDF...');
+        const pdfjsLib = await loadPdfJs();
+        
+        setProcessingProgress('Lendo estrutura do arquivo PDF...');
+        const arrayBuffer = await file.arrayBuffer();
+        
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdf = await loadingTask.promise;
+        const totalPdfPages = pdf.numPages;
+        
+        if (totalPdfPages === 0) {
+          throw new Error('O arquivo PDF não possui páginas válidas.');
+        }
+
+        const passages: { pageNumber: number; chapterTitle: string; text: string }[] = [];
+        let currentChapter = "Capítulo I";
+
+        for (let i = 1; i <= totalPdfPages; i++) {
+          setProcessingProgress(`Extraindo texto: página ${i} de ${totalPdfPages}...`);
+          
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          
+          const textItems = textContent.items as any[];
+          let lastY = -1;
+          let pageText = "";
+          
+          for (const item of textItems) {
+            const currentY = item.transform ? item.transform[5] : -1;
+            
+            if (lastY !== -1 && currentY !== -1 && Math.abs(currentY - lastY) > 8) {
+              pageText += "\n";
+            } else if (pageText.length > 0 && !pageText.endsWith("\n") && !pageText.endsWith(" ")) {
+              pageText += " ";
+            }
+            pageText += item.str;
+            if (currentY !== -1) {
+              lastY = currentY;
+            }
+          }
+
+          const trimmedText = pageText.trim();
+          if (trimmedText) {
+            // Chapter header detection inside the first 3 lines of the page
+            const lines = trimmedText.split('\n').map(l => l.trim()).filter(Boolean);
+            for (let j = 0; j < Math.min(3, lines.length); j++) {
+              const line = lines[j];
+              const isHeader = 
+                line.length < 60 && 
+                (/^(capítulo|capitulo|chapter|parte|seção|secao|introdução|introducao|livro|prologo|prólogo|epílogo|epilogo)\b/i.test(line) ||
+                 (/^[IVXLCDM\d\s\.\:\-]+$/i.test(line) && line.length < 30));
+              if (isHeader) {
+                currentChapter = line;
+                break;
+              }
+            }
+
+            passages.push({
+              pageNumber: i,
+              chapterTitle: currentChapter,
+              text: trimmedText
+            });
+          }
+        }
+
+        if (passages.length === 0) {
+          throw new Error('Nenhum texto pôde ser extraído deste arquivo PDF. Ele pode ser composto apenas por imagens digitalizadas (scans).');
+        }
+
+        // Adjust page numbers to make sure they are sequentially continuous
+        const processedPassages = passages.map((p, idx) => ({
+          ...p,
+          pageNumber: idx + 1
+        }));
+
+        setUploadedPassages(processedPassages);
+        setUploadedFileName(file.name);
+        
+        if (!title) {
+          const cleanName = file.name
+            .replace(/\.pdf$/i, '')
+            .replace(/[-_]/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase());
+          setTitle(cleanName);
+        }
+        
+        setTotalPages(processedPassages.length);
+      } catch (err: any) {
+        console.error("Erro no processamento do PDF:", err);
+        setUploadError(err.message || 'Ocorreu um erro ao processar o arquivo PDF. Verifique se ele não está corrompido ou protegido por senha.');
+      } finally {
+        setIsProcessing(false);
       }
-      
-      // Auto-set total pages
-      setTotalPages(passages.length);
-    };
-    reader.readAsText(file);
+    } else {
+      setUploadError('Por favor, envie um arquivo de texto (.txt) ou documento (.pdf).');
+      setIsProcessing(false);
+    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -239,10 +371,20 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
             {/* File Upload Area */}
             <div className="bg-stone-50/50 rounded-2xl border border-dashed border-stone-200 p-4 transition-all duration-200 hover:bg-stone-50">
               <label className="block text-xs uppercase font-mono tracking-wider text-stone-500 font-bold mb-1.5">
-                Carregar Arquivo TXT (Opcional)
+                Carregar Arquivo TXT ou PDF (Opcional)
               </label>
               
-              {!uploadedFileName ? (
+              {isProcessing ? (
+                <div className="flex flex-col items-center justify-center py-6 px-2 rounded-xl border border-stone-100 bg-amber-50/20 text-center animate-pulse">
+                  <div className="w-6 h-6 border-2 border-amber-900 border-t-transparent rounded-full animate-spin mb-2"></div>
+                  <span className="text-xs font-sans font-semibold text-stone-800">
+                    {processingProgress}
+                  </span>
+                  <span className="text-[10px] text-stone-400 font-sans mt-0.5">
+                    Isso pode levar alguns segundos dependendo do tamanho da obra.
+                  </span>
+                </div>
+              ) : !uploadedFileName ? (
                 <div 
                   onDragEnter={handleDrag}
                   onDragOver={handleDrag}
@@ -256,13 +398,13 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
                   <input
                     type="file"
                     id="txt-file-input"
-                    accept=".txt"
+                    accept=".txt,.pdf"
                     onChange={handleFileChange}
                     className="hidden"
                   />
                   <Upload className="w-6 h-6 text-stone-400 mb-1.5" />
                   <span className="text-xs font-sans font-semibold text-stone-700">
-                    Arraste ou clique para selecionar (.txt)
+                    Arraste ou clique para selecionar (.txt, .pdf)
                   </span>
                   <span className="text-[10px] text-stone-400 font-sans mt-0.5">
                     O aplicativo dividirá sua obra em páginas de leitura fluida.
