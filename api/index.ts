@@ -22,6 +22,43 @@ const ai = new GoogleGenAI({
   }
 });
 
+// Helper function to call Gemini API with robust retry and fallback models to prevent 503/UNAVAILABLE errors
+async function generateContentWithFallback(options: {
+  contents: any;
+  config?: any;
+}) {
+  const modelsToTry = [
+    "gemini-3.5-flash",
+    "gemini-2.5-flash",
+    "gemini-3.1-flash-lite",
+    "gemini-flash-latest"
+  ];
+
+  let lastError: any = null;
+
+  for (const model of modelsToTry) {
+    try {
+      console.log(`[Gemini API] Tentando gerar conteúdo usando o modelo: ${model}`);
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: options.contents,
+        config: options.config,
+      });
+      console.log(`[Gemini API] Sucesso com o modelo: ${model}`);
+      return response;
+    } catch (error: any) {
+      console.warn(`[Gemini API] Erro ao tentar o modelo ${model}:`, error.message || error);
+      lastError = error;
+      
+      // Se for um erro 503 (serviço indisponível), 429 (limite de taxa) ou rede, vale a pena tentar o próximo
+      // Damos uma pequena pausa de 200ms antes da próxima tentativa
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+
+  throw lastError || new Error("Falha ao gerar conteúdo com todos os modelos disponíveis de IA.");
+}
+
 // Health check endpoint to diagnose Vercel deployment and environment variables
 app.get("/api/health", (req, res) => {
   res.json({
@@ -69,9 +106,8 @@ app.post("/api/gemini/explain", async (req, res) => {
       return res.status(400).json({ error: "Modo inválido. Escolha entre 'meaning', 'simple' ou 'historical'." });
     }
 
-    // Call Gemini API using gemini-flash-latest (highly stable production alias)
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+    // Call Gemini API using fallback mechanism (tries gemini-3.5-flash, gemini-2.5-flash, gemini-3.1-flash-lite, etc.)
+    const response = await generateContentWithFallback({
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -125,8 +161,8 @@ Evite longos discursos acadêmicos ou respostas exaustivas. Interaja de forma ac
 
     textContext += `Pergunta atual do Leitor: "${question}"\n\nResponda diretamente ao leitor sob a ótica do autor de forma instigante e acolhedora:`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
+    // Call Gemini API using fallback mechanism
+    const response = await generateContentWithFallback({
       contents: textContext,
       config: {
         systemInstruction: systemInstruction,
