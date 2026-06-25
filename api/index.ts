@@ -69,9 +69,9 @@ app.post("/api/gemini/explain", async (req, res) => {
       return res.status(400).json({ error: "Modo inválido. Escolha entre 'meaning', 'simple' ou 'historical'." });
     }
 
-    // Call Gemini API using gemini-3.5-flash
+    // Call Gemini API using gemini-flash-latest (highly stable production alias)
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-flash-latest",
       contents: prompt,
       config: {
         systemInstruction: systemInstruction,
@@ -126,7 +126,7 @@ Evite longos discursos acadêmicos ou respostas exaustivas. Interaja de forma ac
     textContext += `Pergunta atual do Leitor: "${question}"\n\nResponda diretamente ao leitor sob a ótica do autor de forma instigante e acolhedora:`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-flash-latest",
       contents: textContext,
       config: {
         systemInstruction: systemInstruction,
