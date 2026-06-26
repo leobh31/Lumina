@@ -181,9 +181,9 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
     const selectionText = selection?.toString();
     if (selectionText && selectionText.trim()) {
       setCustomSelectedText(selectionText.trim());
-      setActiveTab('dossier');
+      setActiveTab('chat');
       setShowCompanionOnMobile(true);
-      triggerToast("Excelente! Trecho carregado no X-Ray. Escolha uma das ações inteligentes da IA abaixo.");
+      triggerToast("Excelente! Trecho carregado. Você já pode debater sobre ele com o Lumina!");
     } else {
       triggerToast("Por favor, selecione (marque em azul) primeiro um trecho do livro antes de usar este recurso.");
     }
@@ -280,7 +280,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   const [showCompanionOnMobile, setShowCompanionOnMobile] = useState<boolean>(false);
 
   // --- Conversations Tab ("Conversar com o trecho") ---
-  const [activeTab, setActiveTab] = useState<'dossier' | 'chat'>('dossier');
+  const [activeTab, setActiveTab] = useState<'dossier' | 'chat'>('chat');
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'user' | 'assistant'; text: string; timestamp: Date }>>([]);
   const [chatInput, setChatInput] = useState<string>('');
   const [isChatLoading, setIsChatLoading] = useState<boolean>(false);
@@ -402,8 +402,8 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
     setChatMessages([]);
     if (activeTab === 'chat') {
       const textIntro = customSelectedText 
-        ? `Olá! Sou o mentor do e-reader Lumina.\n\nIdentifiquei que você selecionou um trecho específico do livro para debater:\n\n*"${customSelectedText}"*\n\nComo esse trecho específico se conecta com sua vida prática, ou qual é a sua dúvida analítica sobre ele? Pergunte-me diretamente abaixo!`
-        : `Olá! Sou o mentor de Lumina.\n\nVamos debater de forma ativa este trecho de *"${book.title}"* de *${book.author || "Autor Desconhecido"}* (Página ${currentPassage.pageNumber}).\n\nComo esse pensamento reverbera na sua vida prática ou na modernidade? Você pode perguntar se ele se aplica à ansiedade moderna ou escrever sua dúvida abaixo!`;
+        ? `Olá! Sou o Professor Lumina. Vamos debater este trecho de *"${book.title}"*:\n\n*"${customSelectedText}"*\n\nComo isso se aplica na sua vida prática? Pergunte-me ou selecione uma sugestão abaixo!`
+        : `Olá! Sou o Professor Lumina. Vamos debater de forma ativa este trecho de *"${book.title}"* (Página ${currentPassage.pageNumber}).\n\nQual é a sua dúvida ou como esse pensamento se conecta com a sua vida prática? Pergunte-me ou escolha uma sugestão abaixo!`;
 
       setChatMessages([
         {
@@ -1274,233 +1274,28 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         <div className={`p-4 border-b ${activeStyles.border} flex justify-between items-center`} id="smart-panel-header">
           <div className="flex items-center gap-1.5 text-xs font-sans uppercase tracking-wider font-bold">
             <Sparkles className="w-4 h-4 text-[#5A5A40]" />
-            <span>X-Ray & Intelecto Ativo</span>
+            <span>Conversando com o livro</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[9px] font-mono opacity-60 uppercase branding-text hidden xs:inline">E-Reader Inteligente</span>
             <button
               onClick={() => setShowCompanionOnMobile(false)}
-              className="md:hidden px-3 py-1.5 bg-[#5A5A40] text-white font-sans text-[10px] uppercase font-bold tracking-wider rounded-sm transition cursor-pointer"
+              className="md:hidden p-1.5 bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 rounded-full transition cursor-pointer text-[#5A5A40] dark:text-[#D0CB9E]"
               title="Voltar para o livro"
             >
-              Voltar ao Livro
+              <ArrowLeft className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Tab Selection */}
-        <div className={`flex border-b ${activeStyles.border} text-[10px] font-sans tracking-wider uppercase font-bold relative z-10 shrink-0`}>
-          <button
-            onClick={() => {
-              setActiveTab('dossier');
-              stopTts();
-            }}
-            className={`flex-grow flex items-center justify-center gap-1 py-3 text-center transition border-b-2 cursor-pointer ${
-              activeTab === 'dossier' 
-                ? 'border-[#5A5A40] text-[#5A5A40] font-extrabold' 
-                : 'border-transparent text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'
-            }`}
-          >
-            Dossiê Origem
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab('chat');
-              stopTts();
-              if (chatMessages.length === 0) {
-                setChatMessages([
-                  {
-                    sender: 'assistant',
-                    text: `Olá! Sou o mentor de Lumina.\n\nVamos debater de forma ativa este trecho de *"${book.title}"* de *${book.author || "Autor Desconhecido"}* (Página ${currentPassage.pageNumber}).\n\nComo esse pensamento reverbera na sua vida prática ou na modernidade? Você pode perguntar se ele se aplica à ansiedade moderna ou escrever sua dúvida abaixo!`,
-                    timestamp: new Date()
-                  }
-                ]);
-              }
-            }}
-            className={`flex-grow flex items-center justify-center gap-1 py-3 text-center transition border-b-2 cursor-pointer ${
-              activeTab === 'chat' 
-                ? 'border-[#5A5A40] text-[#5A5A40] font-extrabold' 
-                : 'border-transparent text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#5A5A40]" />
-            Conversar com o Trecho
-          </button>
-        </div>
-
         {/* Panel Content Area (Assorted view of analysis output or chat output) */}
-        <div className="flex-grow p-4 md:p-5 overflow-y-auto space-y-4 flex flex-col justify-between" id="smart-panel-body">
+        <div className="flex-grow p-4 md:p-5 overflow-hidden flex flex-col justify-between" id="smart-panel-body">
           
-          {/* Active selection focus and paste overlay widget */}
-          <div className={`p-4 md:p-5 rounded-sm border ${activeStyles.border} ${theme === 'charcoal' ? 'bg-stone-800/60' : 'bg-[#5A5A40]/5'} font-sans text-xs space-y-3 transition-all duration-300 shrink-0`}>
-            
-            {/* Quick direct page switcher within companion */}
-            <div className="flex items-center justify-between pb-2 border-b border-black/5 dark:border-white/5 text-[11px] font-sans">
-              <span className="opacity-75 font-semibold">Mudar de Página:</span>
-              <div className="flex items-center gap-1 flex-wrap justify-end max-w-xs">
-                {passages.length <= 8 ? (
-                  passages.map((_, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setRelativePageIndex(idx);
-                        setCustomSelectedText('');
-                        triggerToast(`Você mudou para a página ${idx + 1}`);
-                      }}
-                      title={`Ir para a página ${idx + 1}`}
-                      className={`px-2 py-1 text-[10px] min-w-[24px] text-center font-bold rounded-sm border transition cursor-pointer ${
-                        relativePageIndex === idx
-                          ? 'bg-[#5A5A40] text-white border-transparent'
-                          : 'border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/20 text-stone-700 dark:text-stone-300 bg-white/20 dark:bg-stone-900/40'
-                      }`}
-                    >
-                      {idx + 1}
-                    </button>
-                  ))
-                ) : (
-                  <>
-                    {/* First Page */}
-                    {relativePageIndex > 1 && (
-                      <button
-                        onClick={() => { setRelativePageIndex(0); setCustomSelectedText(''); }}
-                        className="px-2 py-1 text-[10px] font-bold rounded-sm border border-black/10 text-stone-700 dark:text-stone-300 cursor-pointer"
-                      >
-                        1
-                      </button>
-                    )}
-                    {relativePageIndex > 2 && <span className="text-stone-400">...</span>}
-
-                    {/* Surrounding Pages */}
-                    {Array.from({ length: passages.length })
-                      .map((_, idx) => idx)
-                      .filter(idx => Math.abs(idx - relativePageIndex) <= 1)
-                      .map((idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => {
-                            setRelativePageIndex(idx);
-                            setCustomSelectedText('');
-                            triggerToast(`Você mudou para a página ${idx + 1}`);
-                          }}
-                          className={`px-2 py-1 text-[10px] min-w-[24px] text-center font-bold rounded-sm border transition cursor-pointer ${
-                            relativePageIndex === idx
-                              ? 'bg-[#5A5A40] text-white border-transparent'
-                              : 'border-black/10 hover:border-black/25 dark:border-white/10 dark:hover:border-white/20 text-stone-700 dark:text-stone-300 bg-white/20 dark:bg-stone-900/40'
-                          }`}
-                        >
-                          {idx + 1}
-                        </button>
-                      ))}
-
-                    {relativePageIndex < passages.length - 3 && <span className="text-stone-400">...</span>}
-                    {/* Last Page */}
-                    {relativePageIndex < passages.length - 2 && (
-                      <button
-                        onClick={() => { setRelativePageIndex(passages.length - 1); setCustomSelectedText(''); }}
-                        className="px-2 py-1 text-[10px] font-bold rounded-sm border border-black/10 text-stone-700 dark:text-stone-300 cursor-pointer"
-                      >
-                        {passages.length}
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-[#5A5A40] dark:text-[#D0CB9E] flex items-center gap-1.5 font-sans">
-                {customSelectedText ? "🎯 Trecho Personalizado Ativo" : "📖 Trecho da Página Inteira"}
-              </span>
-              <div className="flex items-center gap-2">
-                {customSelectedText && (
-                  <button
-                    onClick={() => {
-                      setCustomSelectedText('');
-                      triggerToast("Você retornou para o estudo da página inteira.");
-                    }}
-                    className="text-[9px] text-red-650 dark:text-red-400 uppercase font-extrabold hover:underline transition cursor-pointer"
-                  >
-                    Anular Trecho
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="p-4 md:p-5 border-l-2 border-[#5A5A40] bg-black/[0.015] dark:bg-white/[0.01] overflow-y-auto max-h-[110px]">
-              <p className="font-serif italic opacity-95 text-stone-700 dark:text-stone-300 text-sm sm:text-base leading-relaxed">
-                "{customSelectedText || currentPassage.text}"
-              </p>
-            </div>
-
-            {/* Custom Paste controller */}
-            <div className="pt-2 border-t border-black/5 dark:border-white/5 flex flex-col gap-2">
-              {!isPastingText ? (
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="opacity-65">Estudo personalizado:</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleCaptureSelection}
-                      className="text-[#5A5A40] dark:text-[#D0CB9E] font-extrabold uppercase tracking-wide hover:underline flex items-center gap-0.5 cursor-pointer"
-                      title="Captura o trecho que você marcou em azul na página de leitura"
-                    >
-                      ✨ Capturar Seleção
-                    </button>
-                    <span className="opacity-30">|</span>
-                    <button
-                      onClick={() => {
-                        setIsPastingText(true);
-                        setPasteAreaValue(customSelectedText || '');
-                      }}
-                      className="text-[#5A5A40] dark:text-[#D0CB9E] font-extrabold uppercase tracking-wide hover:underline flex items-center gap-0.5 cursor-pointer"
-                    >
-                      ✍️ Digitar/Colar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2 text-left">
-                  <textarea
-                    value={pasteAreaValue}
-                    onChange={(e) => setPasteAreaValue(e.target.value)}
-                    placeholder="Cole aqui o trecho complicado do livro que deseja estudar por voz e texto..."
-                    className="w-full text-[11px] p-2 leading-relaxed border border-black/15 dark:border-white/10 rounded-sm bg-white dark:bg-stone-900 font-serif focus:outline-none focus:border-[#5A5A40] text-stone-800 dark:text-stone-100 h-16 min-h-[50px] resize-none"
-                  />
-                  <div className="flex items-center justify-end gap-1.5">
-                    <button
-                      onClick={() => {
-                        setIsPastingText(false);
-                        setPasteAreaValue('');
-                      }}
-                      className="px-2 py-1 text-[9px] uppercase font-bold hover:bg-black/5 text-stone-500 transition cursor-pointer"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      onClick={() => {
-                        if (pasteAreaValue.trim()) {
-                          setCustomSelectedText(pasteAreaValue.trim());
-                          setIsPastingText(false);
-                          setPasteAreaValue('');
-                          setActiveTab('dossier');
-                          triggerToast("Sucesso! Trecho customizado definido como escopo do X-Ray.");
-                        } else {
-                          triggerToast("Insira um texto válido antes de fixar!");
-                        }
-                      }}
-                      className="px-3 py-1 bg-[#5A5A40] text-white text-[9px] uppercase font-bold rounded-sm hover:bg-[#4A4A33] transition cursor-pointer"
-                    >
-                      Estudar este Trecho
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
           {activeTab === 'chat' ? (
             <div className="flex flex-col h-full justify-between gap-4" id="chat-tab-panel">
               {/* Messages viewport */}
-              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[35vh] md:max-h-[calc(100vh-420px)]" id="chat-messages-scrollarea">
+              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[72vh] md:max-h-[calc(100vh-230px)] flex flex-col" id="chat-messages-scrollarea">
+                <div className="flex-grow" />
                 {chatMessages.map((msg, idx) => {
                   const isUser = msg.sender === 'user';
                   return (

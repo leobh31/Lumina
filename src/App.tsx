@@ -365,10 +365,10 @@ export default function App() {
         </section>
 
         {/* Dashboard Panels Grid */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start mb-8 flex-grow" id="main-grid">
+        <section className="grid grid-cols-1 gap-8 items-start mb-8 flex-grow" id="main-grid">
           
-          {/* LEFT SIDE: BIBLIOTECA (Takes 7 columns if panels are active, or full 12 if none are active) */}
-          <div className={`${showTrilhas || showNivel ? 'lg:col-span-7' : 'lg:col-span-12'} space-y-6 transition-all duration-300`} id="shelf-column">
+          {/* LEFT SIDE: BIBLIOTECA (Takes full width) */}
+          <div className="w-full space-y-6 transition-all duration-300" id="shelf-column">
             
             {/* ESTANTE PARTICULAR */}
             <div className="bg-white/60 border border-black/10 rounded-sm p-6 relative" id="shelf-card">
@@ -499,9 +499,9 @@ export default function App() {
 
           </div>
 
-          {/* RIGHT SIDE: PANEL EXTENSIONS (Takes 5 columns, rendered when either panel is active) */}
+          {/* PANEL EXTENSIONS (Takes full width, rendered when either panel is active) */}
           {(showTrilhas || showNivel) && (
-            <div className="lg:col-span-5 space-y-6" id="extensions-column">
+            <div className="w-full space-y-6" id="extensions-column">
               
               {/* TRILHAS DE ESTUDO PANEL */}
               <AnimatePresence>
