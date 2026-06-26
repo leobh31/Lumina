@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Book } from '../types';
-import { X, Save, Trash2, Calendar, Star, BookOpen, Clock } from 'lucide-react';
+import { X, Save, Trash2, Calendar, Star, BookOpen, Clock, Lock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface BookDetailModalProps {
@@ -9,9 +9,19 @@ interface BookDetailModalProps {
   onSave: (updatedBook: Book) => void;
   onDelete: (bookId: string) => void;
   onOpenKindle: (book: Book) => void;
+  isAdmin?: boolean;
+  onRequestAuth?: (message: string) => void;
 }
 
-export default function BookDetailModal({ book, onClose, onSave, onDelete, onOpenKindle }: BookDetailModalProps) {
+export default function BookDetailModal({ 
+  book, 
+  onClose, 
+  onSave, 
+  onDelete, 
+  onOpenKindle,
+  isAdmin = false,
+  onRequestAuth
+}: BookDetailModalProps) {
   const [currentPage, setCurrentPage] = useState<number>(0);
   const [rating, setRating] = useState<number | undefined>(undefined);
   const [notes, setNotes] = useState<string>('');
@@ -217,14 +227,26 @@ export default function BookDetailModal({ book, onClose, onSave, onDelete, onOpe
             <button
               type="button"
               onClick={() => {
-                if (confirm(`Tem certeza de que deseja remover o livro "${book.title}" da sua estante?`)) {
-                  onDelete(book.id);
+                if (isAdmin) {
+                  if (confirm(`Tem certeza de que deseja remover o livro "${book.title}" da sua estante?`)) {
+                    onDelete(book.id);
+                  }
+                } else {
+                  if (onRequestAuth) {
+                    onRequestAuth(`Para excluir o livro "${book.title}", é necessário acesso de Administrador.`);
+                  }
                 }
               }}
-              className="px-2.5 py-1.5 hover:bg-rose-50 border border-transparent hover:border-rose-200 text-rose-600 rounded-xl transition flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold font-mono uppercase tracking-wider"
+              className={`px-2.5 py-1.5 rounded-xl transition flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold font-mono uppercase tracking-wider border ${
+                isAdmin 
+                  ? "hover:bg-rose-50 border-transparent hover:border-rose-200 text-rose-600 cursor-pointer" 
+                  : "bg-stone-50 border-stone-200 text-stone-400 hover:text-stone-600 hover:border-stone-300 cursor-pointer"
+              }`}
               id="delete-book-btn"
+              title={isAdmin ? "Excluir livro da estante" : "Exclusão restrita para administradores"}
             >
-              <Trash2 className="w-3.5 h-3.5" /> Excluir
+              {isAdmin ? <Trash2 className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />} 
+              {isAdmin ? "Excluir" : "Excluir (Restrito)"}
             </button>
 
             <div className="flex gap-2">

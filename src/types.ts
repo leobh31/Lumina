@@ -45,3 +45,11 @@ export interface Category {
   textClass: string;
   borderClass: string;
 }
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  isAdmin: boolean;
+}
+

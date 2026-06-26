@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Book, LearningPath, Category } from './types';
+import { Book, LearningPath, Category, User } from './types';
 import { INITIAL_CATEGORIES, INITIAL_BOOKS, INITIAL_PATHS } from './initialData';
 import { savePassagesToIndexedDB, deletePassagesFromIndexedDB } from './utils/indexedDb';
 
@@ -11,6 +11,7 @@ import BookDetailModal from './components/BookDetailModal';
 import AddBookModal from './components/AddBookModal';
 import AddPathModal from './components/AddPathModal';
 import KindleReader from './components/KindleReader';
+import AuthModal from './components/AuthModal';
 
 // Icons
 import { 
@@ -24,7 +25,9 @@ import {
   LogOut, 
   Bookmark, 
   GraduationCap,
-  Award
+  Award,
+  Lock,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -47,6 +50,11 @@ export default function App() {
   const [showTrilhas, setShowTrilhas] = useState(false);
   const [showNivel, setShowNivel] = useState(false);
 
+  // --- Auth states ---
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [pendingActionMessage, setPendingActionMessage] = useState<string | null>(null);
+
   // --- Modal Controllers ---
   const [selectedBookForNotes, setSelectedBookForNotes] = useState<Book | null>(null);
   const [activeKindleBook, setActiveKindleBook] = useState<Book | null>(null);
@@ -60,6 +68,7 @@ export default function App() {
   useEffect(() => {
     const savedBooks = localStorage.getItem('lumina_books');
     const savedPaths = localStorage.getItem('lumina_paths');
+    const savedUser = localStorage.getItem('lumina_current_user');
 
     if (savedBooks) {
       setBooks(JSON.parse(savedBooks));
@@ -75,9 +84,31 @@ export default function App() {
       localStorage.setItem('lumina_paths', JSON.stringify(INITIAL_PATHS));
     }
 
+    if (savedUser) {
+      setCurrentUser(JSON.parse(savedUser));
+    }
+
     // Set a random quote index
     setQuoteIndex(Math.floor(Math.random() * INTERESTING_QUOTES.length));
   }, []);
+
+  const handleLoginSuccess = (user: User) => {
+    setCurrentUser(user);
+    localStorage.setItem('lumina_current_user', JSON.stringify(user));
+    setPendingActionMessage(null);
+  };
+
+  const handleLogout = () => {
+    if (confirm("Tem certeza de que deseja sair da sua conta administrativa?")) {
+      setCurrentUser(null);
+      localStorage.removeItem('lumina_current_user');
+    }
+  };
+
+  const handleRequestAuth = (message: string) => {
+    setPendingActionMessage(message);
+    setIsAuthOpen(true);
+  };
 
   // Helper helper to save states
   const saveBooksState = (newBooks: Book[]) => {
@@ -254,7 +285,13 @@ export default function App() {
           {/* Quick Config Actions */}
           <div className="flex items-center gap-3.5 animate-fade-in" id="header-action-panel">
             <button
-              onClick={() => setIsAddBookOpen(true)}
+              onClick={() => {
+                if (currentUser?.isAdmin) {
+                  setIsAddBookOpen(true);
+                } else {
+                  handleRequestAuth("Para adicionar novos livros ao acervo geral do Lumina, é necessário acesso de Administrador.");
+                }
+              }}
               className="px-3.5 py-1.5 bg-[#5A5A40] hover:bg-[#4A4A33] text-white rounded-none text-[10px] font-sans uppercase tracking-[0.1em] transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm hover:shadow-md"
               title="Adicionar um novo livro (inclusive obras completas em formato .txt ou .pdf)"
             >
@@ -263,7 +300,13 @@ export default function App() {
             </button>
             <div className="h-4 w-px bg-black/10"></div>
             <button
-              onClick={resetToSeedData}
+              onClick={() => {
+                if (currentUser?.isAdmin) {
+                  resetToSeedData();
+                } else {
+                  handleRequestAuth("Para restaurar e resetar os dados modelo da estante, é necessário privilégios de Administrador.");
+                }
+              }}
               className="px-3 py-1.5 border border-black/10 hover:border-black/30 rounded-none text-[10px] font-sans uppercase tracking-widest text-[#1A1A1A] hover:bg-white transition flex items-center gap-1.5 font-bold cursor-pointer"
               title="Restaurar dados modelo"
             >
@@ -271,10 +314,40 @@ export default function App() {
               Resetar Estante
             </button>
             <div className="h-4 w-px bg-black/10 hidden sm:block"></div>
-            <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono text-stone-400">
-              <span>Sincronia Local</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#5A5A40] inline-block animate-pulse"></span>
-            </div>
+            
+            {/* User Login/Auth Indicator */}
+            {currentUser ? (
+              <div className="flex items-center gap-2" id="user-profile-widget">
+                <div 
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-none text-[10px] font-sans font-bold tracking-wider ${
+                    currentUser.isAdmin 
+                      ? 'bg-amber-50/50 border-amber-900/25 text-amber-900' 
+                      : 'bg-stone-100 border-stone-200 text-stone-600'
+                  }`}
+                >
+                  <Shield className={`w-3.5 h-3.5 ${currentUser.isAdmin ? 'text-amber-800' : 'text-stone-400'}`} />
+                  <span>{currentUser.isAdmin ? 'ADMIN' : 'LEITOR'}: {currentUser.name.split(' ')[0].toUpperCase()}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 border border-black/10 hover:border-rose-300 hover:bg-rose-50 text-stone-500 hover:text-rose-600 transition cursor-pointer"
+                  title="Sair da Conta"
+                  id="logout-btn"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setPendingActionMessage(null); setIsAuthOpen(true); }}
+                className="px-3 py-1.5 bg-stone-100 border border-stone-200 hover:border-black/30 hover:bg-white text-[#5A5A40] hover:text-black transition flex items-center gap-1.5 font-bold text-[10px] font-sans uppercase tracking-widest cursor-pointer"
+                title="Fazer Login / Acesso Administrativo"
+                id="login-btn"
+              >
+                <Lock className="w-3 h-3" />
+                Acesso Admin
+              </button>
+            )}
           </div>
         </header>
 
@@ -614,6 +687,8 @@ export default function App() {
           setSelectedBookForNotes(null);
           setActiveKindleBook(b);
         }}
+        isAdmin={currentUser?.isAdmin || false}
+        onRequestAuth={handleRequestAuth}
       />
 
       {/* Kindle Reader View */}
@@ -638,6 +713,17 @@ export default function App() {
         onClose={() => setIsAddPathOpen(false)}
         books={books}
         onAdd={handleCreatePath}
+      />
+
+      {/* Auth Portal Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => {
+          setIsAuthOpen(false);
+          setPendingActionMessage(null);
+        }}
+        onLoginSuccess={handleLoginSuccess}
+        message={pendingActionMessage}
       />
 
     </div>
