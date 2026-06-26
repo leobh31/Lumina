@@ -289,7 +289,9 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   // --- TTS Player Control States ---
   const [isPlayingTts, setIsPlayingTts] = useState<boolean>(false);
   const [isPausedTts, setIsPausedTts] = useState<boolean>(false);
+  const [activeTtsText, setActiveTtsText] = useState<string | null>(null);
   const ttsUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const activeTtsRequestIdRef = useRef<number>(0);
 
   // --- Kokoro TTS Player State ---
   const [ttsEngine, setTtsEngine] = useState<'kokoro' | 'native'>('kokoro');
@@ -428,6 +430,12 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
     if (!textToSpeak) return;
 
+    // Set active text
+    setActiveTtsText(textToSpeak);
+
+    // Track request ID to handle race conditions
+    const requestId = ++activeTtsRequestIdRef.current;
+
     // Strip out markdown syntax before reading for a super clean output sound
     const cleanText = textToSpeak.replace(/[\*\#\`\_\-\>]/g, ' ').trim();
 
@@ -446,6 +454,9 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
             speed: 1.05
           })
         });
+
+        // If a newer request was made during the fetch, ignore this outcome completely
+        if (requestId !== activeTtsRequestIdRef.current) return;
 
         if (!response.ok) {
           let errorMsg = `Erro ${response.status}: ${response.statusText || 'Falha na resposta do servidor'}`;
@@ -467,6 +478,8 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         }
 
         const blob = await response.blob();
+        if (requestId !== activeTtsRequestIdRef.current) return;
+
         const audioUrl = URL.createObjectURL(blob);
 
         const newAudio = new Audio(audioUrl);
@@ -475,17 +488,22 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
         audioRef.current = newAudio;
 
         newAudio.onended = () => {
-          setIsPlayingTts(false);
-          setIsPausedTts(false);
+          if (requestId === activeTtsRequestIdRef.current) {
+            setIsPlayingTts(false);
+            setIsPausedTts(false);
+            setActiveTtsText(null);
+          }
           URL.revokeObjectURL(audioUrl);
         };
 
         newAudio.onerror = (e) => {
           console.error("Erro ao reproduzir áudio Kokoro:", e);
-          setIsPlayingTts(false);
-          setIsPausedTts(false);
-          // Auto fallback to browser native
-          executeNativeTts(cleanText);
+          if (requestId === activeTtsRequestIdRef.current) {
+            setIsPlayingTts(false);
+            setIsPausedTts(false);
+            // Auto fallback to browser native
+            executeNativeTts(cleanText);
+          }
         };
 
         setIsTtsLoading(false);
@@ -495,8 +513,10 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
       } catch (err: any) {
         console.warn("Kokoro TTS falhou, usando voz nativa como fallback:", err);
-        setIsTtsLoading(false);
-        executeNativeTts(cleanText);
+        if (requestId === activeTtsRequestIdRef.current) {
+          setIsTtsLoading(false);
+          executeNativeTts(cleanText);
+        }
       }
     } else {
       executeNativeTts(cleanText);
@@ -518,7 +538,27 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
       utterance.rate = playbackSpeed;
 
       const voices = window.speechSynthesis.getVoices();
-      const ptVoice = voices.find(v => v.lang.startsWith('pt'));
+      const ptVoices = voices.filter(v => v.lang.replace('_', '-').startsWith('pt'));
+      // Prioritize female voice names
+      let ptVoice = ptVoices.find(v => 
+        v.name.toLowerCase().includes('google') ||
+        v.name.toLowerCase().includes('maria') ||
+        v.name.toLowerCase().includes('luciana') ||
+        v.name.toLowerCase().includes('joana') ||
+        v.name.toLowerCase().includes('francisca') ||
+        v.name.toLowerCase().includes('female') ||
+        v.name.toLowerCase().includes('heloisa') ||
+        v.name.toLowerCase().includes('luzia')
+      );
+      if (!ptVoice) {
+        // Exclude common male voice names if possible to keep it female
+        ptVoice = ptVoices.find(v => 
+          !v.name.toLowerCase().includes('felipe') && 
+          !v.name.toLowerCase().includes('daniel') && 
+          !v.name.toLowerCase().includes('male')
+        ) || ptVoices[0];
+      }
+      
       if (ptVoice) {
         utterance.voice = ptVoice;
       }
@@ -526,11 +566,13 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
       utterance.onend = () => {
         setIsPlayingTts(false);
         setIsPausedTts(false);
+        setActiveTtsText(null);
       };
 
       utterance.onerror = () => {
         setIsPlayingTts(false);
         setIsPausedTts(false);
+        setActiveTtsText(null);
       };
 
       ttsUtteranceRef.current = utterance;
@@ -541,6 +583,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
       console.error(err);
       setIsPlayingTts(false);
       setIsPausedTts(false);
+      setActiveTtsText(null);
     }
   };
 
@@ -570,6 +613,9 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
   };
 
   const stopTts = () => {
+    // Increment request ID to cancel any ongoing fetches
+    activeTtsRequestIdRef.current++;
+
     // Cancel native synthesis
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -589,6 +635,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
     setIsPlayingTts(false);
     setIsPausedTts(false);
     setIsTtsLoading(false);
+    setActiveTtsText(null);
   };
 
   // Clean synthesis voices list on start
@@ -955,7 +1002,6 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                       {[
                         { id: 'pt_neural', label: 'Voz Neural 🇧🇷 (Principal)' },
                         { id: 'pt_maria', label: 'Maria 🇧🇷 (Suave)' },
-                        { id: 'pt_felipe', label: 'Felipe 🇧🇷 (Masculina)' },
                         { id: 'af_sarah', label: 'Sarah 🇺🇸 (Inglês)' },
                         { id: 'bf_emma', label: 'Emma 🇬🇧 (Britânico)' },
                         { id: 'es_isabella', label: 'Isabella 🇪🇸 (Espanhol)' }
@@ -1318,13 +1364,59 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
 
                       {/* Audiobook narration per answer bubble */}
                       {!isUser && (
-                        <button
-                          type="button"
-                          onClick={() => executeTtsExplanation(msg.text)}
-                          className="text-[9px] font-sans font-bold uppercase tracking-wider flex items-center gap-1 opacity-70 hover:opacity-100 mt-1 cursor-pointer hover:text-[#5A5A40] text-stone-500 pl-1"
-                        >
-                          <AudioLines className="w-3.5 h-3.5" /> Ouvir com Voz
-                        </button>
+                        <div className="flex items-center gap-2 mt-1 pl-1">
+                          {activeTtsText === msg.text ? (
+                            <div className="flex items-center gap-1.5 bg-[#5A5A40]/10 dark:bg-white/5 px-2.5 py-1 border border-[#5A5A40]/20 dark:border-white/10 rounded-md">
+                              {isTtsLoading ? (
+                                <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-[#5A5A40] dark:text-[#D0CB9E] flex items-center gap-1">
+                                  <Loader2 className="w-3 h-3 animate-spin" /> Sintetizando...
+                                </span>
+                              ) : isPlayingTts && !isPausedTts ? (
+                                <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
+                                  <AudioLines className="w-3.5 h-3.5 animate-pulse text-emerald-600" /> Narrando...
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-sans font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 flex items-center gap-1">
+                                  <Pause className="w-3 h-3 text-stone-400" /> Pausado
+                                </span>
+                              )}
+                              
+                              <div className="w-px h-3 bg-stone-300 dark:bg-stone-700"></div>
+
+                              {/* Toggle Pause / Resume Button */}
+                              {!isTtsLoading && (
+                                <button
+                                  type="button"
+                                  onClick={togglePauseTts}
+                                  className="text-[9px] font-sans font-bold uppercase tracking-wider text-stone-600 dark:text-stone-300 hover:text-[#5A5A40] dark:hover:text-white transition flex items-center gap-0.5 cursor-pointer"
+                                  title={isPausedTts ? "Retomar Áudio" : "Pausar Áudio"}
+                                >
+                                  {isPausedTts ? <Play className="w-2.5 h-2.5" /> : <Pause className="w-2.5 h-2.5" />}
+                                  {isPausedTts ? "Retomar" : "Pausar"}
+                                </button>
+                              )}
+
+                              {/* Discrete Stop Button */}
+                              <button
+                                type="button"
+                                onClick={stopTts}
+                                className="text-[9px] font-sans font-bold uppercase tracking-wider text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-300 transition flex items-center gap-0.5 cursor-pointer ml-1"
+                                title="Parar Áudio"
+                              >
+                                <Square className="w-2.5 h-2.5 fill-current" />
+                                Parar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => executeTtsExplanation(msg.text)}
+                              className="text-[9px] font-sans font-bold uppercase tracking-wider flex items-center gap-1 opacity-70 hover:opacity-100 cursor-pointer hover:text-[#5A5A40] text-stone-500"
+                            >
+                              <AudioLines className="w-3.5 h-3.5" /> Ouvir com Voz
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   );
