@@ -1294,8 +1294,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
           {activeTab === 'chat' ? (
             <div className="flex flex-col h-full justify-between gap-4" id="chat-tab-panel">
               {/* Messages viewport */}
-              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[72vh] md:max-h-[calc(100vh-230px)] flex flex-col" id="chat-messages-scrollarea">
-                <div className="flex-grow" />
+              <div className="flex-grow overflow-y-auto space-y-4 pr-1 max-h-[55vh] md:max-h-[calc(100vh-340px)] flex flex-col" id="chat-messages-scrollarea">
                 {chatMessages.map((msg, idx) => {
                   const isUser = msg.sender === 'user';
                   return (
@@ -1345,10 +1344,12 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
               </div>
 
               {/* Input section at the bottom */}
-              <div className="pt-2 border-t border-black/5 dark:border-white/5 space-y-3 shrink-0">
-                <div className="space-y-1.5">
-                  <p className="text-[9px] font-sans uppercase tracking-wider opacity-60 font-bold text-stone-500">Sugestões rápidas:</p>
-                  <div className="flex flex-col gap-1.5">
+              <div className="pt-3 border-t border-stone-200 dark:border-stone-800 space-y-4 shrink-0" id="chat-input-section">
+                <div className="space-y-2 bg-stone-50 dark:bg-stone-950/40 border border-stone-200/60 dark:border-stone-800/60 p-3 sm:p-4 rounded-lg shadow-sm">
+                  <p className="text-[10px] sm:text-xs font-sans uppercase tracking-widest font-extrabold text-[#5A5A40] dark:text-[#D0CB9E] flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-[#5A5A40] dark:text-[#D0CB9E]" /> Sugestões rápidas de debate:
+                  </p>
+                  <div className="flex flex-col gap-2">
                     {[
                       "Isso se aplica à ansiedade moderna?",
                       "Como posso exercitar ou aplicar essa reflexão no dia a dia?",
@@ -1358,7 +1359,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                         key={idx}
                         onClick={() => handleSendChatMessage(sug)}
                         disabled={isChatLoading}
-                        className="text-[10px] text-left font-sans py-1.5 px-3 border border-black/15 dark:border-white/10 hover:border-[#5A5A40] hover:bg-black/[0.02] active:bg-black/[0.05] transition truncate cursor-pointer rounded-sm text-stone-600 dark:text-stone-300 disabled:opacity-50"
+                        className="text-xs sm:text-[13px] text-left font-serif leading-snug py-2.5 px-3.5 border border-[#5A5A40]/15 dark:border-[#D0CB9E]/15 hover:border-[#5A5A40] dark:hover:border-[#D0CB9E] hover:bg-[#5A5A40]/5 dark:hover:bg-[#D0CB9E]/5 active:bg-[#5A5A40]/10 transition cursor-pointer rounded-md text-stone-700 dark:text-stone-200 disabled:opacity-50 font-medium"
                       >
                         {sug}
                       </button>
@@ -1371,7 +1372,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                     e.preventDefault();
                     handleSendChatMessage(chatInput);
                   }}
-                  className="flex items-center gap-1.5 border border-black/15 dark:border-white/15 p-0.5 bg-white dark:bg-stone-900 shadow-sm"
+                  className="flex items-center gap-1.5 border border-[#5A5A40]/30 dark:border-[#D0CB9E]/30 p-1 bg-white dark:bg-stone-950 shadow-md rounded-lg focus-within:ring-1 focus-within:ring-[#5A5A40] transition duration-200"
                 >
                   <input
                     type="text"
@@ -1379,12 +1380,12 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                     onChange={(e) => setChatInput(e.target.value)}
                     placeholder="Faça uma pergunta sobre o trecho..."
                     disabled={isChatLoading}
-                    className="flex-grow pl-2.5 pr-2 py-1.5 text-xs font-sans bg-transparent focus:outline-none dark:text-white"
+                    className="flex-grow pl-3 pr-2 py-2 text-xs sm:text-sm font-sans bg-transparent focus:outline-none dark:text-white"
                   />
                   <button
                     type="submit"
                     disabled={isChatLoading || !chatInput.trim()}
-                    className="px-3 py-1.5 bg-[#5A5A40] text-white text-[10px] uppercase tracking-wider font-bold font-sans hover:bg-[#4A4A33] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                    className="px-4 py-2 bg-[#5A5A40] dark:bg-[#707050] text-white text-[10px] sm:text-xs uppercase tracking-widest font-bold font-sans hover:bg-[#4A4A33] transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0 rounded-md"
                   >
                     Perguntar
                   </button>
