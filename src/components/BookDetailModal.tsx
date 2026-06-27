@@ -26,6 +26,7 @@ export default function BookDetailModal({
   const [rating, setRating] = useState<number | undefined>(undefined);
   const [notes, setNotes] = useState<string>('');
   const [status, setStatus] = useState<'reading' | 'completed' | 'want-to-read'>('reading');
+  const [showConfirmDelete, setShowConfirmDelete] = useState<boolean>(false);
 
   // Sync with current book
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function BookDetailModal({
       setRating(book.rating);
       setNotes(book.notes || '');
       setStatus(book.status);
+      setShowConfirmDelete(false);
     }
   }, [book]);
 
@@ -224,50 +226,79 @@ export default function BookDetailModal({
 
           {/* Actions Footer */}
           <div className="flex items-center justify-between border-t border-stone-100 pt-4 mt-2 sm:mt-3 flex-shrink-0" id="modal-footer-actions">
-            <button
-              type="button"
-              onClick={() => {
-                if (isAdmin) {
-                  if (confirm(`Tem certeza de que deseja remover o livro "${book.title}" da sua estante?`)) {
-                    onDelete(book.id);
-                  }
-                } else {
-                  if (onRequestAuth) {
-                    onRequestAuth(`Para excluir o livro "${book.title}", é necessário acesso de Administrador.`);
-                  }
-                }
-              }}
-              className={`px-2.5 py-1.5 rounded-xl transition flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold font-mono uppercase tracking-wider border ${
-                isAdmin 
-                  ? "hover:bg-rose-50 border-transparent hover:border-rose-200 text-rose-600 cursor-pointer" 
-                  : "bg-stone-50 border-stone-200 text-stone-400 hover:text-stone-600 hover:border-stone-300 cursor-pointer"
-              }`}
-              id="delete-book-btn"
-              title={isAdmin ? "Excluir livro da estante" : "Exclusão restrita para administradores"}
-            >
-              {isAdmin ? <Trash2 className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />} 
-              {isAdmin ? "Excluir" : "Excluir (Restrito)"}
-            </button>
+            {showConfirmDelete ? (
+              <div className="flex items-center gap-2 w-full justify-between" id="confirm-delete-actions">
+                <span className="text-[10px] sm:text-xs font-mono text-rose-600 font-semibold uppercase animate-pulse">
+                  Excluir permanentemente?
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmDelete(false)}
+                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl transition text-xs font-sans font-semibold cursor-pointer"
+                    id="cancel-delete-btn"
+                  >
+                    Não
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDelete(book.id);
+                      setShowConfirmDelete(false);
+                    }}
+                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl transition text-xs font-sans font-semibold shadow-sm cursor-pointer"
+                    id="confirm-delete-btn"
+                  >
+                    Sim, Excluir
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isAdmin) {
+                      setShowConfirmDelete(true);
+                    } else {
+                      if (onRequestAuth) {
+                        onRequestAuth(`Para excluir o livro "${book.title}", é necessário acesso de Administrador.`);
+                      }
+                    }
+                  }}
+                  className={`px-2.5 py-1.5 rounded-xl transition flex items-center gap-1.5 text-[10px] sm:text-xs font-semibold font-mono uppercase tracking-wider border ${
+                    isAdmin 
+                      ? "hover:bg-rose-50 border-transparent hover:border-rose-200 text-rose-600 cursor-pointer" 
+                      : "bg-stone-50 border-stone-200 text-stone-400 hover:text-stone-600 hover:border-stone-300 cursor-pointer"
+                  }`}
+                  id="delete-book-btn"
+                  title={isAdmin ? "Excluir livro da estante" : "Exclusão restrita para administradores"}
+                >
+                  {isAdmin ? <Trash2 className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />} 
+                  {isAdmin ? "Excluir" : "Excluir (Restrito)"}
+                </button>
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl transition text-xs sm:text-sm font-sans font-semibold text-center"
-                id="cancel-modal-btn"
-              >
-                Cancelar
-              </button>
-              
-              <button
-                type="button"
-                onClick={handleSave}
-                className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl transition text-xs sm:text-sm font-sans font-semibold flex items-center gap-1.5 text-center"
-                id="save-modal-btn"
-              >
-                <Save className="w-3.5 h-3.5" /> Salvar
-              </button>
-            </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl transition text-xs sm:text-sm font-sans font-semibold text-center cursor-pointer"
+                    id="cancel-modal-btn"
+                  >
+                    Cancelar
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="px-4 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl transition text-xs sm:text-sm font-sans font-semibold flex items-center gap-1.5 text-center cursor-pointer"
+                    id="save-modal-btn"
+                  >
+                    <Save className="w-3.5 h-3.5" /> Salvar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </motion.div>
       </div>

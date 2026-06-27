@@ -49,6 +49,7 @@ export default function App() {
   const [currentBookTab, setCurrentBookTab] = useState<'reading' | 'want-to-read' | 'completed'>('reading');
   const [showTrilhas, setShowTrilhas] = useState(false);
   const [showNivel, setShowNivel] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // --- Auth states ---
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -99,10 +100,8 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    if (confirm("Tem certeza de que deseja sair da sua conta administrativa?")) {
-      setCurrentUser(null);
-      localStorage.removeItem('lumina_current_user');
-    }
+    setCurrentUser(null);
+    localStorage.removeItem('lumina_current_user');
   };
 
   const handleRequestAuth = (message: string) => {
@@ -202,19 +201,30 @@ export default function App() {
     savePathsState([newPath, ...paths]);
   };
 
+  const handleDeletePath = (pathId: string) => {
+    const filtered = paths.filter(p => p.id !== pathId);
+    savePathsState(filtered);
+  };
+
   const rotateQuote = () => {
     setQuoteIndex((prev) => (prev + 1) % INTERESTING_QUOTES.length);
   };
 
   // Reset to default seed data if they want to start fresh/test
   const resetToSeedData = () => {
-    if (confirm("Deseja resetar a sua estante e trilhas para o modelo inicial do Lumina? Todos os seus dados customs serão limpos.")) {
+    if (showResetConfirm) {
       localStorage.removeItem('lumina_books');
       localStorage.removeItem('lumina_paths');
       setBooks(INITIAL_BOOKS);
       setPaths(INITIAL_PATHS);
       setSelectedCategory('todos');
       setSearchTerm('');
+      setShowResetConfirm(false);
+    } else {
+      setShowResetConfirm(true);
+      setTimeout(() => {
+        setShowResetConfirm(false);
+      }, 4000);
     }
   };
 
@@ -307,11 +317,15 @@ export default function App() {
                   handleRequestAuth("Para restaurar e resetar os dados modelo da estante, é necessário privilégios de Administrador.");
                 }
               }}
-              className="px-3 py-1.5 border border-black/10 hover:border-black/30 rounded-none text-[10px] font-sans uppercase tracking-widest text-[#1A1A1A] hover:bg-white transition flex items-center gap-1.5 font-bold cursor-pointer"
-              title="Restaurar dados modelo"
+              className={`px-3 py-1.5 border rounded-none text-[10px] font-sans uppercase tracking-widest transition flex items-center gap-1.5 font-bold cursor-pointer ${
+                showResetConfirm 
+                  ? 'border-rose-500 bg-rose-50 text-rose-700 hover:bg-rose-100 shadow-inner' 
+                  : 'border-black/10 hover:border-black/30 text-[#1A1A1A] hover:bg-white'
+              }`}
+              title={showResetConfirm ? "Clique novamente para CONFIRMAR" : "Restaurar dados modelo"}
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Resetar Estante
+              <RefreshCw className={`w-3.5 h-3.5 ${showResetConfirm ? 'animate-spin text-rose-600' : ''}`} />
+              {showResetConfirm ? "Confirmar Reset?" : "Resetar Estante"}
             </button>
             <div className="h-4 w-px bg-black/10 hidden sm:block"></div>
             
@@ -618,6 +632,9 @@ export default function App() {
                                 path={path}
                                 books={books}
                                 onToggleStep={handleTogglePathwayStep}
+                                isAdmin={currentUser?.isAdmin}
+                                onDelete={handleDeletePath}
+                                onRequestAuth={handleRequestAuth}
                               />
                             ))
                           ) : (

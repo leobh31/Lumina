@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LearningPath, PathStep, Book } from '../types';
-import { ChevronDown, ChevronUp, CheckCircle, Circle, BookOpen, Clock, BarChart } from 'lucide-react';
+import { ChevronDown, ChevronUp, CheckCircle, Circle, BookOpen, Clock, BarChart, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface PathCardProps {
@@ -8,9 +8,12 @@ interface PathCardProps {
   path: LearningPath;
   books: Book[];
   onToggleStep: (pathId: string, stepId: string) => void;
+  isAdmin?: boolean;
+  onDelete?: (pathId: string) => void;
+  onRequestAuth?: (message: string) => void;
 }
 
-export default function PathCard({ path, books, onToggleStep }: PathCardProps) {
+export default function PathCard({ path, books, onToggleStep, isAdmin = false, onDelete, onRequestAuth }: PathCardProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const completedSteps = path.steps.filter(s => s.completed).length;
@@ -80,6 +83,33 @@ export default function PathCard({ path, books, onToggleStep }: PathCardProps) {
               ></div>
             </div>
           </div>
+
+          {onDelete && (
+            <button 
+              type="button"
+              className={`w-7 h-7 rounded-sm border flex items-center justify-center transition cursor-pointer ${
+                isAdmin 
+                  ? "border-transparent hover:border-rose-200 hover:bg-rose-50 text-rose-600" 
+                  : "border-black/5 bg-stone-50/50 text-stone-350 cursor-pointer"
+              }`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isAdmin) {
+                  if (onRequestAuth) {
+                    onRequestAuth(`Para excluir a trilha de estudos "${path.name}", é necessário acesso de Administrador.`);
+                  }
+                  return;
+                }
+                if (confirm(`Deseja remover a trilha "${path.name}" permanentemente?`)) {
+                  onDelete(path.id);
+                }
+              }}
+              title={isAdmin ? "Excluir trilha de estudos" : "Exclusão restrita para administradores"}
+              id={`delete-path-btn-${path.id}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           <button 
             type="button"
