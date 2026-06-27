@@ -210,30 +210,85 @@ app.post("/api/tts/kokoro", async (req, res) => {
     }
 
     // Google Translate TTS accepts max 200 chars per request.
-    const sentences = cleanText.split(/([\.\!\?;\n])\s*/);
-    const chunks: string[] = [];
-    let currentChunk = "";
-
-    for (let i = 0; i < sentences.length; i++) {
-      const sentencePart = sentences[i];
-      if (!sentencePart) continue;
-
-      if (currentChunk.length + sentencePart.length > 180) {
-        if (currentChunk.trim()) {
-          chunks.push(currentChunk.trim());
+    // We use a highly robust splitter to guarantee every chunk is under 150 characters.
+    const splitIntoSafeChunks = (textStr: string, maxLen: number = 150): string[] => {
+      const majorParts = textStr.split(/([.!?\n])/);
+      const tempParts: string[] = [];
+      
+      for (let i = 0; i < majorParts.length; i += 2) {
+        const segment = majorParts[i];
+        const punc = majorParts[i + 1] || "";
+        const combined = (segment + punc).trim();
+        if (combined) {
+          tempParts.push(combined);
         }
-        currentChunk = sentencePart;
-      } else {
-        currentChunk = currentChunk ? currentChunk + " " + sentencePart : sentencePart;
       }
-    }
-    if (currentChunk.trim()) {
-      chunks.push(currentChunk.trim());
-    }
 
-    if (chunks.length === 0) {
-      chunks.push(cleanText.substring(0, 180));
-    }
+      const finalSubParts: string[] = [];
+
+      for (const part of tempParts) {
+        if (part.length <= maxLen) {
+          finalSubParts.push(part);
+        } else {
+          const secondaryParts = part.split(/([;:, \-()])/);
+          let currentSubPart = "";
+          
+          for (let j = 0; j < secondaryParts.length; j++) {
+            const sub = secondaryParts[j];
+            if (!sub) continue;
+            
+            if (currentSubPart.length + sub.length > maxLen) {
+              if (currentSubPart.trim()) {
+                finalSubParts.push(currentSubPart.trim());
+              }
+              currentSubPart = sub;
+            } else {
+              currentSubPart += sub;
+            }
+          }
+          if (currentSubPart.trim()) {
+            finalSubParts.push(currentSubPart.trim());
+          }
+        }
+      }
+
+      const chunksList: string[] = [];
+      let currentChunk = "";
+
+      for (const part of finalSubParts) {
+        const cleanedPart = part.trim();
+        if (!cleanedPart) continue;
+
+        if (cleanedPart.length > maxLen) {
+          let remaining = cleanedPart;
+          while (remaining.length > maxLen) {
+            chunksList.push(remaining.substring(0, maxLen));
+            remaining = remaining.substring(maxLen);
+          }
+          if (remaining.trim()) {
+            chunksList.push(remaining.trim());
+          }
+          continue;
+        }
+
+        if (currentChunk.length + cleanedPart.length + 1 > maxLen) {
+          if (currentChunk.trim()) {
+            chunksList.push(currentChunk.trim());
+          }
+          currentChunk = cleanedPart;
+        } else {
+          currentChunk = currentChunk ? currentChunk + " " + cleanedPart : cleanedPart;
+        }
+      }
+
+      if (currentChunk.trim()) {
+        chunksList.push(currentChunk.trim());
+      }
+
+      return chunksList;
+    };
+
+    const chunks = splitIntoSafeChunks(cleanText, 150);
 
     console.log(`[Neural TTS] Split text into ${chunks.length} chunks for continuous streaming`);
 
