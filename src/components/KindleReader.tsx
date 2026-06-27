@@ -24,6 +24,7 @@ import {
   Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import JSZip from 'jszip';
 
 interface KindleReaderProps {
   book: Book;
@@ -34,6 +35,192 @@ interface KindleReaderProps {
 type KindleTheme = 'light' | 'sepia' | 'charcoal' | 'mint';
 type KindleFont = 'serif' | 'sans' | 'mono' | 'dyslexic';
 type KindleMargin = 'narrow' | 'medium' | 'wide';
+
+// Helper function to resolve relative paths inside the EPUB zip
+function resolveRelativePath(baseDir: string, relativePath: string): string {
+  const combined = baseDir + relativePath;
+  const parts = combined.split('/');
+  const resolvedParts: string[] = [];
+  
+  for (const part of parts) {
+    if (part === '.' || part === '') {
+      continue;
+    }
+    if (part === '..') {
+      resolvedParts.pop();
+    } else {
+      resolvedParts.push(part);
+    }
+  }
+  
+  return resolvedParts.join('/');
+}
+
+// Function to parse EPUB files to book passages
+const parseEpubToPassages = async (
+  file: File,
+  onProgress: (msg: string) => void
+): Promise<{ pageNumber: number; chapterTitle: string; text: string }[]> => {
+  onProgress('Lendo estrutura do arquivo EPUB...');
+  const zip = await JSZip.loadAsync(file);
+
+  const containerFile = zip.file('META-INF/container.xml');
+  if (!containerFile) {
+    throw new Error('Formato EPUB inválido (container.xml ausente).');
+  }
+
+  const containerXmlText = await containerFile.async('text');
+  const parser = new DOMParser();
+  const containerDoc = parser.parseFromString(containerXmlText, 'text/xml');
+  const rootfilePath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
+  if (!rootfilePath) {
+    throw new Error('Não foi possível localizar o arquivo de manifesto (.opf) no EPUB.');
+  }
+
+  const opfDir = rootfilePath.includes('/') 
+    ? rootfilePath.substring(0, rootfilePath.lastIndexOf('/') + 1)
+    : '';
+
+  onProgress('Lendo índices e capítulos...');
+  const opfFile = zip.file(rootfilePath);
+  if (!opfFile) {
+    throw new Error(`Arquivo de manifesto não encontrado no EPUB: ${rootfilePath}`);
+  }
+
+  const opfText = await opfFile.async('text');
+  const opfDoc = parser.parseFromString(opfText, 'text/xml');
+
+  // Parse Manifest
+  const manifestItems: Record<string, string> = {};
+  const itemElements = opfDoc.querySelectorAll('manifest > item');
+  itemElements.forEach(item => {
+    const id = item.getAttribute('id');
+    const href = item.getAttribute('href');
+    if (id && href) {
+      manifestItems[id] = decodeURIComponent(href);
+    }
+  });
+
+  // Parse Spine
+  const spineElements = opfDoc.querySelectorAll('spine > itemref');
+  const spineIds: string[] = [];
+  spineElements.forEach(item => {
+    const idref = item.getAttribute('idref');
+    if (idref) {
+      spineIds.push(idref);
+    }
+  });
+
+  if (spineIds.length === 0) {
+    throw new Error('Nenhuma sequência de leitura (spine) encontrada no arquivo EPUB.');
+  }
+
+  const passages: { pageNumber: number; chapterTitle: string; text: string }[] = [];
+  let pageNumber = 1;
+  const MAX_CHAR_PER_PAGE = 850;
+  let currentChapterTitle = 'Capítulo 1';
+
+  for (let i = 0; i < spineIds.length; i++) {
+    const spineId = spineIds[i];
+    const relativeHref = manifestItems[spineId];
+    if (!relativeHref) continue;
+
+    const fullPath = resolveRelativePath(opfDir, relativeHref);
+    onProgress(`Processando capítulo ${i + 1} de ${spineIds.length}...`);
+    
+    const xhtmlFile = zip.file(fullPath);
+    if (!xhtmlFile) {
+      console.warn(`Arquivo do spine não encontrado: ${fullPath}`);
+      continue;
+    }
+
+    const xhtmlText = await xhtmlFile.async('text');
+    const doc = parser.parseFromString(xhtmlText, 'text/html');
+
+    // Tentar obter o título do capítulo
+    let sectionTitle = '';
+    const heading = doc.querySelector('h1, h2, h3, h4, title');
+    if (heading) {
+      sectionTitle = heading.textContent?.trim() || '';
+    }
+    
+    sectionTitle = sectionTitle.replace(/\s+/g, ' ');
+    if (sectionTitle && sectionTitle.length > 2 && sectionTitle.length < 100) {
+      currentChapterTitle = sectionTitle;
+    }
+
+    // Extrair parágrafos
+    const paragraphs: string[] = [];
+    const blockElements = doc.querySelectorAll('p, blockquote, li, div');
+    
+    if (blockElements.length > 0) {
+      blockElements.forEach(el => {
+        const tagName = el.tagName.toLowerCase();
+        if (tagName === 'p' || tagName === 'blockquote' || tagName === 'li') {
+          const txt = el.textContent?.trim();
+          if (txt) paragraphs.push(txt);
+        } else if (tagName === 'div') {
+          const hasChildren = el.querySelector('p, div, blockquote, li');
+          if (!hasChildren) {
+            const txt = el.textContent?.trim();
+            if (txt) paragraphs.push(txt);
+          }
+        }
+      });
+    } else {
+      const bodyText = doc.body?.textContent?.trim();
+      if (bodyText) {
+        paragraphs.push(...bodyText.split('\n\n').map(x => x.trim()).filter(Boolean));
+      }
+    }
+
+    if (paragraphs.length === 0) {
+      const bodyText = doc.body?.textContent?.trim();
+      if (bodyText) {
+        paragraphs.push(...bodyText.split('\n').map(x => x.trim()).filter(Boolean));
+      }
+    }
+
+    // Dividir parágrafos em páginas de leitura
+    let currentPageText = '';
+    for (const p of paragraphs) {
+      const cleanedP = p.replace(/\s+/g, ' ');
+      if (!cleanedP) continue;
+
+      if (currentPageText.length + cleanedP.length > MAX_CHAR_PER_PAGE && currentPageText.trim()) {
+        passages.push({
+          pageNumber,
+          chapterTitle: currentChapterTitle,
+          text: currentPageText.trim()
+        });
+        pageNumber++;
+        currentPageText = cleanedP;
+      } else {
+        currentPageText = currentPageText ? currentPageText + '\n\n' + cleanedP : cleanedP;
+      }
+    }
+
+    if (currentPageText.trim()) {
+      passages.push({
+        pageNumber,
+        chapterTitle: currentChapterTitle,
+        text: currentPageText.trim()
+      });
+      pageNumber++;
+    }
+  }
+
+  // Se nada foi extraído
+  if (passages.length === 0) {
+    throw new Error('Não foi possível extrair texto legível das seções do EPUB.');
+  }
+
+  // Renumerar páginas sequencialmente
+  return passages.map((p, idx) => ({
+    ...p,
+    pageNumber: idx + 1
+  }));
+};
 
 function isTextGarbled(text: string): boolean {
   if (!text || text.length < 10) return false;
@@ -217,63 +404,95 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const isEpub = file.name.endsWith('.epub') || file.type === 'application/epub+zip';
     setIsTxtReplacing(true);
-    triggerToast("Processando arquivo de texto...");
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
+    if (isEpub) {
+      triggerToast("Processando arquivo EPUB...");
       try {
-        const fullText = event.target?.result as string;
-        if (!fullText || !fullText.trim()) {
-          triggerToast("O arquivo TXT está vazio!");
-          setIsTxtReplacing(false);
-          return;
-        }
+        const epubPassages = await parseEpubToPassages(file, (msg) => {
+          // Progress update can be logged if needed
+        });
 
-        // Split text into pages
-        const words = fullText.split(/\s+/);
-        const wordsPerPage = 220; // Approximately 1500-1850 chars
-        const generatedPassages: PassagePage[] = [];
-        let currentPageText: string[] = [];
-        let pageNum = 1;
-
-        for (let i = 0; i < words.length; i++) {
-          currentPageText.push(words[i]);
-          if (currentPageText.length >= wordsPerPage || i === words.length - 1) {
-            generatedPassages.push({
-              pageNumber: pageNum,
-              chapterTitle: `Seção ${pageNum}`,
-              text: currentPageText.join(' ')
-            });
-            currentPageText = [];
-            pageNum++;
-          }
-        }
-
-        if (generatedPassages.length === 0) {
-          triggerToast("Não foi possível processar o arquivo.");
+        if (epubPassages.length === 0) {
+          triggerToast("Não foi possível extrair páginas do EPUB.");
           setIsTxtReplacing(false);
           return;
         }
 
         // Save to state & IndexedDB
-        setPassages(generatedPassages);
+        setPassages(epubPassages);
         setRelativePageIndex(0);
         setIsEditingPageText(false);
-        await savePassagesToIndexedDB(book.id, generatedPassages);
+        await savePassagesToIndexedDB(book.id, epubPassages);
 
-        triggerToast(`Sucesso! Substituído por ${generatedPassages.length} páginas limpas.`);
-      } catch (err) {
-        console.error("Error parsing replacement TXT file:", err);
-        triggerToast("Erro ao processar o arquivo TXT.");
+        triggerToast(`Sucesso! Substituído por ${epubPassages.length} páginas limpas.`);
+      } catch (err: any) {
+        console.error("Erro no processamento do EPUB:", err);
+        triggerToast(`Erro ao processar EPUB: ${err.message || err}`);
       } finally {
         setIsTxtReplacing(false);
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
         }
       }
-    };
-    reader.readAsText(file, 'utf-8');
+    } else {
+      triggerToast("Processando arquivo de texto...");
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const fullText = event.target?.result as string;
+          if (!fullText || !fullText.trim()) {
+            triggerToast("O arquivo TXT está vazio!");
+            setIsTxtReplacing(false);
+            return;
+          }
+
+          // Split text into pages
+          const words = fullText.split(/\s+/);
+          const wordsPerPage = 220; // Approximately 1500-1850 chars
+          const generatedPassages: PassagePage[] = [];
+          let currentPageText: string[] = [];
+          let pageNum = 1;
+
+          for (let i = 0; i < words.length; i++) {
+            currentPageText.push(words[i]);
+            if (currentPageText.length >= wordsPerPage || i === words.length - 1) {
+              generatedPassages.push({
+                pageNumber: pageNum,
+                chapterTitle: `Seção ${pageNum}`,
+                text: currentPageText.join(' ')
+              });
+              currentPageText = [];
+              pageNum++;
+            }
+          }
+
+          if (generatedPassages.length === 0) {
+            triggerToast("Não foi possível processar o arquivo.");
+            setIsTxtReplacing(false);
+            return;
+          }
+
+          // Save to state & IndexedDB
+          setPassages(generatedPassages);
+          setRelativePageIndex(0);
+          setIsEditingPageText(false);
+          await savePassagesToIndexedDB(book.id, generatedPassages);
+
+          triggerToast(`Sucesso! Substituído por ${generatedPassages.length} páginas limpas.`);
+        } catch (err) {
+          console.error("Error parsing replacement TXT file:", err);
+          triggerToast("Erro ao processar o arquivo TXT.");
+        } finally {
+          setIsTxtReplacing(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
   };
 
   // --- Mobile responsivity toggle ---
@@ -1026,20 +1245,20 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                   </p>
                 )}
 
-                {/* Seção de Substituição por TXT (Corrigir codificação) */}
+                {/* Seção de Substituição por TXT/EPUB (Corrigir codificação) */}
                 <div id="txt-replacement-section" className="pt-3 border-t border-black/5 dark:border-white/5 space-y-2 font-sans text-xs">
                   <span className="font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <FileText className="w-3.5 h-3.5" /> Corrigir Livro com Arquivo de Texto (.txt):
+                    <FileText className="w-3.5 h-3.5" /> Corrigir Livro com Arquivo TXT ou EPUB:
                   </span>
                   <p className="text-[10px] text-stone-500 dark:text-stone-400 leading-normal">
-                    Se o seu arquivo PDF tem erros de codificação ou scanner e não mostra o texto correto, você pode subir o livro em formato <strong>.txt</strong> limpo. Nós dividiremos o texto automaticamente em páginas perfeitas!
+                    Se o seu arquivo PDF tem erros de codificação ou scanner e não mostra o texto correto, você pode subir o livro em formato <strong>.txt</strong> ou <strong>.epub</strong> limpo. Nós dividiremos o texto automaticamente em páginas perfeitas!
                   </p>
                   <div className="flex items-center gap-2">
                     <input
                       type="file"
                       ref={fileInputRef}
                       onChange={handleTxtFileReplacement}
-                      accept=".txt"
+                      accept=".txt,.epub"
                       className="hidden"
                     />
                     <button
@@ -1056,7 +1275,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                       ) : (
                         <>
                           <FileText className="w-3.5 h-3.5" />
-                          <span>Selecionar Arquivo .TXT</span>
+                          <span>Selecionar Arquivo .TXT / .EPUB</span>
                         </>
                       )}
                     </button>
@@ -1146,7 +1365,7 @@ export default function KindleReader({ book, onClose, onPageUpdate }: KindleRead
                         }}
                         className="px-3 py-1 border border-[#5A5A40] text-[#5A5A40] dark:text-[#D0CB9E] dark:border-[#D0CB9E] hover:bg-black/5 dark:hover:bg-white/5 font-bold uppercase tracking-wider text-[10px] rounded-xs cursor-pointer flex items-center gap-1"
                       >
-                        <FileText className="w-3 h-3" /> Substituir por .TXT Limpo
+                        <FileText className="w-3 h-3" /> Substituir por TXT / EPUB
                       </button>
                     </div>
                   </div>

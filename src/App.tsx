@@ -303,10 +303,10 @@ export default function App() {
                 }
               }}
               className="px-3.5 py-1.5 bg-[#5A5A40] hover:bg-[#4A4A33] text-white rounded-none text-[10px] font-sans uppercase tracking-[0.1em] transition flex items-center gap-1.5 font-bold cursor-pointer shadow-sm hover:shadow-md"
-              title="Adicionar um novo livro (inclusive obras completas em formato .txt ou .pdf)"
+              title="Adicionar um novo livro (inclusive obras completas em formato .txt, .pdf ou .epub)"
             >
               <Plus className="w-3.5 h-3.5" />
-              Adicionar Livro (.txt, .pdf)
+              Adicionar Livro (.txt, .pdf, .epub)
             </button>
             <div className="h-4 w-px bg-black/10"></div>
             <button

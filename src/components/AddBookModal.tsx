@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Book } from '../types';
 import { X, Check, Upload, FileText, CheckCircle2, Trash2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import JSZip from 'jszip';
 
 interface AddBookModalProps {
   isOpen: boolean;
@@ -113,6 +114,192 @@ const parseTxtToPassages = (rawText: string): { pageNumber: number; chapterTitle
   return passages;
 };
 
+// Helper function to resolve relative paths inside the EPUB zip
+function resolveRelativePath(baseDir: string, relativePath: string): string {
+  const combined = baseDir + relativePath;
+  const parts = combined.split('/');
+  const resolvedParts: string[] = [];
+  
+  for (const part of parts) {
+    if (part === '.' || part === '') {
+      continue;
+    }
+    if (part === '..') {
+      resolvedParts.pop();
+    } else {
+      resolvedParts.push(part);
+    }
+  }
+  
+  return resolvedParts.join('/');
+}
+
+// Function to parse EPUB files to book passages
+const parseEpubToPassages = async (
+  file: File,
+  onProgress: (msg: string) => void
+): Promise<{ pageNumber: number; chapterTitle: string; text: string }[]> => {
+  onProgress('Lendo estrutura do arquivo EPUB...');
+  const zip = await JSZip.loadAsync(file);
+
+  const containerFile = zip.file('META-INF/container.xml');
+  if (!containerFile) {
+    throw new Error('Formato EPUB inválido (container.xml ausente).');
+  }
+
+  const containerXmlText = await containerFile.async('text');
+  const parser = new DOMParser();
+  const containerDoc = parser.parseFromString(containerXmlText, 'text/xml');
+  const rootfilePath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
+  if (!rootfilePath) {
+    throw new Error('Não foi possível localizar o arquivo de manifesto (.opf) no EPUB.');
+  }
+
+  const opfDir = rootfilePath.includes('/') 
+    ? rootfilePath.substring(0, rootfilePath.lastIndexOf('/') + 1)
+    : '';
+
+  onProgress('Lendo índices e capítulos...');
+  const opfFile = zip.file(rootfilePath);
+  if (!opfFile) {
+    throw new Error(`Arquivo de manifesto não encontrado no EPUB: ${rootfilePath}`);
+  }
+
+  const opfText = await opfFile.async('text');
+  const opfDoc = parser.parseFromString(opfText, 'text/xml');
+
+  // Parse Manifest
+  const manifestItems: Record<string, string> = {};
+  const itemElements = opfDoc.querySelectorAll('manifest > item');
+  itemElements.forEach(item => {
+    const id = item.getAttribute('id');
+    const href = item.getAttribute('href');
+    if (id && href) {
+      manifestItems[id] = decodeURIComponent(href);
+    }
+  });
+
+  // Parse Spine
+  const spineElements = opfDoc.querySelectorAll('spine > itemref');
+  const spineIds: string[] = [];
+  spineElements.forEach(item => {
+    const idref = item.getAttribute('idref');
+    if (idref) {
+      spineIds.push(idref);
+    }
+  });
+
+  if (spineIds.length === 0) {
+    throw new Error('Nenhuma sequência de leitura (spine) encontrada no arquivo EPUB.');
+  }
+
+  const passages: { pageNumber: number; chapterTitle: string; text: string }[] = [];
+  let pageNumber = 1;
+  const MAX_CHAR_PER_PAGE = 850;
+  let currentChapterTitle = 'Capítulo 1';
+
+  for (let i = 0; i < spineIds.length; i++) {
+    const spineId = spineIds[i];
+    const relativeHref = manifestItems[spineId];
+    if (!relativeHref) continue;
+
+    const fullPath = resolveRelativePath(opfDir, relativeHref);
+    onProgress(`Processando capítulo ${i + 1} de ${spineIds.length}...`);
+    
+    const xhtmlFile = zip.file(fullPath);
+    if (!xhtmlFile) {
+      console.warn(`Arquivo do spine não encontrado: ${fullPath}`);
+      continue;
+    }
+
+    const xhtmlText = await xhtmlFile.async('text');
+    const doc = parser.parseFromString(xhtmlText, 'text/html');
+
+    // Tentar obter o título do capítulo
+    let sectionTitle = '';
+    const heading = doc.querySelector('h1, h2, h3, h4, title');
+    if (heading) {
+      sectionTitle = heading.textContent?.trim() || '';
+    }
+    
+    sectionTitle = sectionTitle.replace(/\s+/g, ' ');
+    if (sectionTitle && sectionTitle.length > 2 && sectionTitle.length < 100) {
+      currentChapterTitle = sectionTitle;
+    }
+
+    // Extrair parágrafos
+    const paragraphs: string[] = [];
+    const blockElements = doc.querySelectorAll('p, blockquote, li, div');
+    
+    if (blockElements.length > 0) {
+      blockElements.forEach(el => {
+        const tagName = el.tagName.toLowerCase();
+        if (tagName === 'p' || tagName === 'blockquote' || tagName === 'li') {
+          const txt = el.textContent?.trim();
+          if (txt) paragraphs.push(txt);
+        } else if (tagName === 'div') {
+          const hasChildren = el.querySelector('p, div, blockquote, li');
+          if (!hasChildren) {
+            const txt = el.textContent?.trim();
+            if (txt) paragraphs.push(txt);
+          }
+        }
+      });
+    } else {
+      const bodyText = doc.body?.textContent?.trim();
+      if (bodyText) {
+        paragraphs.push(...bodyText.split('\n\n').map(x => x.trim()).filter(Boolean));
+      }
+    }
+
+    if (paragraphs.length === 0) {
+      const bodyText = doc.body?.textContent?.trim();
+      if (bodyText) {
+        paragraphs.push(...bodyText.split('\n').map(x => x.trim()).filter(Boolean));
+      }
+    }
+
+    // Dividir parágrafos em páginas de leitura
+    let currentPageText = '';
+    for (const p of paragraphs) {
+      const cleanedP = p.replace(/\s+/g, ' ');
+      if (!cleanedP) continue;
+
+      if (currentPageText.length + cleanedP.length > MAX_CHAR_PER_PAGE && currentPageText.trim()) {
+        passages.push({
+          pageNumber,
+          chapterTitle: currentChapterTitle,
+          text: currentPageText.trim()
+        });
+        pageNumber++;
+        currentPageText = cleanedP;
+      } else {
+        currentPageText = currentPageText ? currentPageText + '\n\n' + cleanedP : cleanedP;
+      }
+    }
+
+    if (currentPageText.trim()) {
+      passages.push({
+        pageNumber,
+        chapterTitle: currentChapterTitle,
+        text: currentPageText.trim()
+      });
+      pageNumber++;
+    }
+  }
+
+  // Se nada foi extraído
+  if (passages.length === 0) {
+    throw new Error('Não foi possível extrair texto legível das seções do EPUB.');
+  }
+
+  // Renumerar páginas sequencialmente
+  return passages.map((p, idx) => ({
+    ...p,
+    pageNumber: idx + 1
+  }));
+};
+
 // Lazy load pdf.js from CDN to extract text page-by-page directly in client
 const loadPdfJs = (): Promise<any> => {
   return new Promise((resolve, reject) => {
@@ -163,6 +350,7 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
 
     const isTxt = file.name.endsWith('.txt') || file.type === 'text/plain';
     const isPdf = file.name.endsWith('.pdf') || file.type === 'application/pdf';
+    const isEpub = file.name.endsWith('.epub') || file.type === 'application/epub+zip';
 
     if (isTxt) {
       const reader = new FileReader();
@@ -312,8 +500,39 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
       } finally {
         setIsProcessing(false);
       }
+    } else if (isEpub) {
+      try {
+        const epubPassages = await parseEpubToPassages(file, (msg) => {
+          setProcessingProgress(msg);
+        });
+
+        if (epubPassages.length === 0) {
+          setUploadError('Não foi possível extrair páginas ou capítulos do arquivo EPUB.');
+          setIsProcessing(false);
+          return;
+        }
+
+        setUploadedPassages(epubPassages);
+        setUploadedFileName(file.name);
+        setHasEncodingIssue(false);
+
+        if (!title) {
+          const cleanName = file.name
+            .replace(/\.epub$/i, '')
+            .replace(/[-_]/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase());
+          setTitle(cleanName);
+        }
+
+        setTotalPages(epubPassages.length);
+      } catch (err: any) {
+        console.error("Erro no processamento do EPUB:", err);
+        setUploadError(`Erro ao ler arquivo EPUB: ${err.message || err}`);
+      } finally {
+        setIsProcessing(false);
+      }
     } else {
-      setUploadError('Por favor, envie um arquivo de texto (.txt) ou documento (.pdf).');
+      setUploadError('Por favor, envie um arquivo de texto (.txt), documento (.pdf) ou livro (.epub).');
       setIsProcessing(false);
     }
   };
@@ -416,7 +635,7 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
             {/* File Upload Area */}
             <div className="bg-stone-50/50 rounded-2xl border border-dashed border-stone-200 p-4 transition-all duration-200 hover:bg-stone-50">
               <label className="block text-xs uppercase font-mono tracking-wider text-stone-500 font-bold mb-1.5">
-                Carregar Arquivo TXT ou PDF (Opcional)
+                Carregar Arquivo TXT, PDF ou EPUB (Opcional)
               </label>
               
               {isProcessing ? (
@@ -443,13 +662,13 @@ export default function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalPro
                   <input
                     type="file"
                     id="txt-file-input"
-                    accept=".txt,.pdf"
+                    accept=".txt,.pdf,.epub"
                     onChange={handleFileChange}
                     className="hidden"
                   />
                   <Upload className="w-6 h-6 text-stone-400 mb-1.5" />
                   <span className="text-xs font-sans font-semibold text-stone-700">
-                    Arraste ou clique para selecionar (.txt, .pdf)
+                    Arraste ou clique para selecionar (.txt, .pdf, .epub)
                   </span>
                   <span className="text-[10px] text-stone-400 font-sans mt-0.5">
                     O aplicativo dividirá sua obra em páginas de leitura fluida.
